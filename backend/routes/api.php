@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ValidationCongeController;
 use App\Http\Controllers\DemandeCongeController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\CalendrierController;  
 
 Route::get('/test', function () {
     return response()->json(['message' => 'API Laravel 12 fonctionne !']);
@@ -24,6 +26,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/solde', [DemandeCongeController::class, 'getSolde']);
         Route::post('/', [DemandeCongeController::class, 'store']);
     });
+// Routes dashboard
+Route::get('/dashboard/stats', [DashboardController::class, 'getStats']);
 
     // Routes pour la validation des congés
 Route::prefix('validation')->group(function () {
@@ -31,5 +35,11 @@ Route::prefix('validation')->group(function () {
     Route::get('/historique', [ValidationCongeController::class, 'historiqueValidations']);
     Route::post('/valider/{idDemande}', [ValidationCongeController::class, 'validerDemande']);
     Route::post('/refuser/{idDemande}', [ValidationCongeController::class, 'refuserDemande']);
+});
+    // Calendrier
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/calendrier/conges', [CalendrierController::class, 'getCongesCalendrier']);
+    Route::post('/calendrier/filter', [CalendrierController::class, 'filterConges']);
+    Route::get('/calendrier/stats', [CalendrierController::class, 'getStatsCalendrier']);
 });
 });

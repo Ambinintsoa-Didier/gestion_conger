@@ -149,14 +149,14 @@ class DemandeCongeController extends Controller
                 }
             }
 
-            if ($typeConge->nom === 'Congé Annuel' && $employe->soldeConge < $nombreJours) {
-                return response()->json([
-                    'message' => 'Solde de congé insuffisant',
-                    'solde_actuel' => $employe->soldeConge,
-                    'jours_demandes' => $nombreJours
-                ], 400);
-            }
-
+                if ($typeConge->nom === 'Congé Annuel' && $employe->soldeConge < $nombreJours) {
+            return response()->json([
+                'message' => 'Solde de congé insuffisant',
+                'solde_actuel' => $employe->soldeConge,
+                'jours_demandes' => $nombreJours,
+                'solde_requis' => $nombreJours
+            ], 400);
+        }
             // Vérifie les chevauchements
             $chevauchement = DemandeConge::where('idEmploye', $employe->matricule)
                 ->whereIn('idStatut', [1, 2]) // En attente ou validée

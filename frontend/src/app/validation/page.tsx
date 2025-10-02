@@ -6,6 +6,14 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
 
+// Shadcn components
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+
 interface Employe {
   matricule: string;
   nom: string;
@@ -36,7 +44,6 @@ interface DemandeConge {
 export default function ValidationPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('a-valider');
   const [demandesAValider, setDemandesAValider] = useState<DemandeConge[]>([]);
   const [historique, setHistorique] = useState<DemandeConge[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,51 +61,16 @@ export default function ValidationPage() {
     try {
       setLoading(true);
       
-      console.log('🚀 Début du chargement des données de validation...');
-      
       const [aValiderRes, historiqueRes] = await Promise.all([
         axios.get('/validation/demandes'),
         axios.get('/validation/historique')
       ]);
 
-      console.log('✅ RÉPONSE API - Demandes à valider:', aValiderRes.data);
-      console.log('✅ RÉPONSE API - Historique:', historiqueRes.data);
-
-      // Analyse détaillée des données
-      if (aValiderRes.data.demandes) {
-        console.log(`📊 ${aValiderRes.data.demandes.length} demande(s) à valider`);
-        aValiderRes.data.demandes.forEach((demande: any, index: number) => {
-          console.log(`🔍 Demande ${index + 1}:`, {
-            id: demande.idDemande,
-            idType: demande.idType,
-            typeConge: demande.typeConge,
-            hasTypeConge: !!demande.typeConge,
-            idStatut: demande.idStatut,
-            statut: demande.statut,
-            hasStatut: !!demande.statut,
-            employe: demande.employe,
-            hasEmploye: !!demande.employe
-          });
-        });
-      }
-
-      if (historiqueRes.data.demandes) {
-        console.log(`📜 ${historiqueRes.data.demandes.length} demande(s) dans l'historique`);
-        historiqueRes.data.demandes.forEach((demande: any, index: number) => {
-          console.log(`📋 Historique ${index + 1}:`, {
-            id: demande.idDemande,
-            typeConge: demande.typeConge,
-            statut: demande.statut
-          });
-        });
-      }
-
       setDemandesAValider(aValiderRes.data.demandes || []);
       setHistorique(historiqueRes.data.demandes || []);
       
     } catch (error: any) {
-      console.error('❌ Erreur chargement données validation:', error);
-      console.error('❌ Response error:', error.response?.data);
+      console.error('Erreur chargement données validation:', error);
       alert('Erreur lors du chargement des données de validation');
     } finally {
       setLoading(false);
@@ -110,7 +82,7 @@ export default function ValidationPage() {
       setActionLoading(idDemande);
       await axios.post(`/validation/valider/${idDemande}`);
       alert('Demande validée avec succès!');
-      loadData(); // Recharge les données
+      loadData();
     } catch (error: any) {
       alert(error.response?.data?.message || 'Erreur lors de la validation');
     } finally {
@@ -127,7 +99,7 @@ export default function ValidationPage() {
       setActionLoading(idDemande);
       await axios.post(`/validation/refuser/${idDemande}`);
       alert('Demande refusée avec succès!');
-      loadData(); // Recharge les données
+      loadData();
     } catch (error: any) {
       alert(error.response?.data?.message || 'Erreur lors du refus');
     } finally {
@@ -155,37 +127,37 @@ export default function ValidationPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Chargement...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Chargement...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* En-tête */}
-      <header className="bg-white shadow">
+      <header className="bg-card border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
+            <div className="flex items-center space-x-4">
               <Link 
                 href="/dashboard" 
-                className="text-gray-400 hover:text-gray-600 mr-4"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Validation des Congés</h1>
-                <p className="text-gray-600 mt-1">
+                <h1 className="text-2xl font-bold text-foreground">Validation des Congés</h1>
+                <p className="text-muted-foreground mt-1">
                   Gestion des demandes de votre équipe
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-gray-700">
+              <span className="text-muted-foreground">
                 {user.nom_complet}
               </span>
             </div>
@@ -195,214 +167,192 @@ export default function ValidationPage() {
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 sm:px-0">
-          <div className="bg-white rounded-lg shadow">
-            {/* Navigation par onglets */}
-            <div className="border-b border-gray-200">
-              <nav className="flex -mb-px">
-                <button
-                  onClick={() => setActiveTab('a-valider')}
-                  className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
-                    activeTab === 'a-valider'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  À Valider
-                  {demandesAValider.length > 0 && (
-                    <span className="ml-2 bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full">
-                      {demandesAValider.length}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setActiveTab('historique')}
-                  className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
-                    activeTab === 'historique'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Historique
-                </button>
-              </nav>
-            </div>
-
-            {/* Contenu des onglets */}
-            <div className="p-6">
-              {activeTab === 'a-valider' && (
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                    Demandes en attente de validation
-                  </h2>
-                  
+          <Card>
+            <CardHeader>
+              <CardTitle>Validation des Congés</CardTitle>
+              <CardDescription>
+                Valider ou refuser les demandes de congé de votre équipe
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="a-valider" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="a-valider">
+                    À Valider
+                    {demandesAValider.length > 0 && (
+                      <Badge variant="secondary" className="ml-2 bg-blue-100 text-blue-800">
+                        {demandesAValider.length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="historique">Historique</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="a-valider" className="space-y-6 mt-6">
                   {loading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                      <p className="mt-2 text-gray-600">Chargement des demandes...</p>
+                    <div className="space-y-4">
+                      {[...Array(2)].map((_, i) => (
+                        <Card key={i}>
+                          <CardContent className="p-6">
+                            <div className="flex justify-between items-start mb-4">
+                              <div className="space-y-2">
+                                <Skeleton className="h-4 w-32" />
+                                <Skeleton className="h-3 w-24" />
+                              </div>
+                              <Skeleton className="h-6 w-20" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <Skeleton className="h-4 w-full" />
+                              <Skeleton className="h-4 w-full" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
                   ) : demandesAValider.length === 0 ? (
-                    <div className="text-center py-12">
-                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <h3 className="mt-2 text-sm font-medium text-gray-900">Aucune demande à valider</h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Toutes les demandes de votre équipe ont été traitées.
-                      </p>
-                    </div>
+                    <Card>
+                      <CardContent className="text-center py-12">
+                        <svg className="mx-auto h-12 w-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-foreground">Aucune demande à valider</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Toutes les demandes de votre équipe ont été traitées.
+                        </p>
+                      </CardContent>
+                    </Card>
                   ) : (
                     <div className="space-y-6">
                       {demandesAValider.map((demande) => (
-                        <div key={demande.idDemande} className="border border-gray-200 rounded-lg p-6">
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <h3 className="text-lg font-semibold text-gray-900">
-                                {demande.employe?.prenom || 'Inconnu'} {demande.employe?.nom || 'Inconnu'}
-                              </h3>
-                              <p className="text-gray-600">{demande.employe?.fonction || 'Fonction inconnue'}</p>
+                        <Card key={demande.idDemande}>
+                          <CardContent className="p-6">
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <h3 className="text-lg font-semibold text-foreground">
+                                  {demande.employe?.prenom || 'Inconnu'} {demande.employe?.nom || 'Inconnu'}
+                                </h3>
+                                <p className="text-muted-foreground">{demande.employe?.fonction || 'Fonction inconnue'}</p>
+                              </div>
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                                En attente
+                              </Badge>
                             </div>
-                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
-                              En attente
-                            </span>
-                          </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <p className="text-sm text-gray-600">Période</p>
-                              <p className="font-medium">
-                                {new Date(demande.dateDebut).toLocaleDateString('fr-FR')} au{' '}
-                                {new Date(demande.dateFin).toLocaleDateString('fr-FR')}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                ({calculateJours(demande.dateDebut, demande.dateFin)} jours)
-                              </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                              <div>
+                                <p className="text-sm text-muted-foreground">Période</p>
+                                <p className="font-medium text-foreground">
+                                  {new Date(demande.dateDebut).toLocaleDateString('fr-FR')} au{' '}
+                                  {new Date(demande.dateFin).toLocaleDateString('fr-FR')}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  ({calculateJours(demande.dateDebut, demande.dateFin)} jours)
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-muted-foreground">Type de congé</p>
+                                <p className="font-medium text-foreground">
+                                  {demande.typeConge?.nom || `Type ${demande.idType}`}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm text-gray-600">Type de congé</p>
-                              <p className="font-medium">
-                                {demande.typeConge?.nom || `Type ${demande.idType}`}
-                              </p>
-                              {!demande.typeConge && (
-                                <p className="text-xs text-red-500">Relation non chargée</p>
-                              )}
-                            </div>
-                          </div>
 
-                          {demande.motif && (
-                            <div className="mb-4">
-                              <p className="text-sm text-gray-600">Motif</p>
-                              <p className="text-gray-900">{demande.motif}</p>
-                            </div>
-                          )}
+                            {demande.motif && (
+                              <div className="mb-4">
+                                <p className="text-sm text-muted-foreground">Motif</p>
+                                <p className="text-foreground">{demande.motif}</p>
+                              </div>
+                            )}
 
-                          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                            <button
-                              onClick={() => refuserDemande(demande.idDemande)}
-                              disabled={actionLoading === demande.idDemande}
-                              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
-                            >
-                              {actionLoading === demande.idDemande ? 'Traitement...' : 'Refuser'}
-                            </button>
-                            <button
-                              onClick={() => validerDemande(demande.idDemande)}
-                              disabled={actionLoading === demande.idDemande}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                            >
-                              {actionLoading === demande.idDemande ? 'Traitement...' : 'Valider'}
-                            </button>
-                          </div>
-                        </div>
+                            <div className="flex justify-end space-x-3 pt-4 border-t border-border">
+                              <Button
+                                onClick={() => refuserDemande(demande.idDemande)}
+                                disabled={actionLoading === demande.idDemande}
+                                variant="outline"
+                              >
+                                {actionLoading === demande.idDemande ? 'Traitement...' : 'Refuser'}
+                              </Button>
+                              <Button
+                                onClick={() => validerDemande(demande.idDemande)}
+                                disabled={actionLoading === demande.idDemande}
+                              >
+                                {actionLoading === demande.idDemande ? 'Traitement...' : 'Valider'}
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
                       ))}
                     </div>
                   )}
-                </div>
-              )}
-
-              {activeTab === 'historique' && (
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                    Historique des validations
-                  </h2>
-                  
+                </TabsContent>
+                
+                <TabsContent value="historique" className="space-y-6 mt-6">
                   {loading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                      <p className="mt-2 text-gray-600">Chargement de l'historique...</p>
+                    <div className="space-y-4">
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-64 w-full" />
                     </div>
                   ) : historique.length === 0 ? (
-                    <div className="text-center py-12">
-                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun historique</h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Aucune demande n'a encore été traitée.
-                      </p>
-                    </div>
+                    <Card>
+                      <CardContent className="text-center py-12">
+                        <svg className="mx-auto h-12 w-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-foreground">Aucun historique</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Aucune demande n'a encore été traitée.
+                        </p>
+                      </CardContent>
+                    </Card>
                   ) : (
-                    <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg">
-                      <table className="min-w-full divide-y divide-gray-300">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Employé
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Période
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Type
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Statut
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Date décision
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                    <Card>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Employé</TableHead>
+                            <TableHead>Période</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Statut</TableHead>
+                            <TableHead>Date décision</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
                           {historique.map((demande) => (
-                            <tr key={demande.idDemande} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">
+                            <TableRow key={demande.idDemande}>
+                              <TableCell>
+                                <div className="font-medium text-foreground">
                                   {demande.employe?.prenom || 'Inconnu'} {demande.employe?.nom || 'Inconnu'}
                                 </div>
-                                <div className="text-sm text-gray-500">{demande.employe?.fonction || 'Fonction inconnue'}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {new Date(demande.dateDebut).toLocaleDateString('fr-FR')} au{' '}
-                                  {new Date(demande.dateFin).toLocaleDateString('fr-FR')}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">
-                                  {demande.typeConge?.nom || `Type ${demande.idType}`}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span
-                                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusColor(
-                                    demande.statut?.libelle || 'Inconnu'
-                                  )}`}
+                                <div className="text-sm text-muted-foreground">{demande.employe?.fonction || 'Fonction inconnue'}</div>
+                              </TableCell>
+                              <TableCell className="text-foreground">
+                                {new Date(demande.dateDebut).toLocaleDateString('fr-FR')} au{' '}
+                                {new Date(demande.dateFin).toLocaleDateString('fr-FR')}
+                              </TableCell>
+                              <TableCell className="text-foreground">
+                                {demande.typeConge?.nom || `Type ${demande.idType}`}
+                              </TableCell>
+                              <TableCell>
+                                <Badge 
+                                  variant="outline"
+                                  className={getStatusColor(demande.statut?.libelle || 'Inconnu')}
                                 >
                                   {demande.statut?.libelle || 'Inconnu'}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
                                 {new Date(demande.dateEnvoi).toLocaleDateString('fr-FR')}
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        </TableBody>
+                      </Table>
+                    </Card>
                   )}
-                </div>
-              )}
-            </div>
-          </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>

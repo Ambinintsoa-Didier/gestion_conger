@@ -3,7 +3,6 @@
 import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import axios from 'axios';
 
-// Ajoute l'interface Employe
 interface Employe {
   matricule: string;
   nom: string;
@@ -18,14 +17,14 @@ interface Employe {
   };
 }
 
-// Corrige l'interface User
 interface User {
   id: number;
   email: string;
   role: string;
   nom_complet: string;
-  employe?: Employe; // Rend employe optionnel
+  employe?: Employe;
 }
+
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -39,12 +38,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Configuration axios
+  // Configuration axios globale
   useEffect(() => {
     axios.defaults.baseURL = 'http://localhost:8000/api';
-    // NE PAS utiliser withCredentials pour les APIs token-based
-    // axios.defaults.withCredentials = true;
-}, []);
+    
+    // Intercepteur pour ajouter le token à toutes les requêtes
+    axios.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
+      }
+    );
+
+    // Intercepteur pour gérer les erreurs 401
+    axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          setUser(null);
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+    );
+  }, []);
 
   useEffect(() => {
     checkUser();
@@ -54,7 +78,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         const response = await axios.get('/user');
         setUser(response.data.user);
       }
@@ -73,7 +96,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const { user: userData, token } = response.data;
       
       localStorage.setItem('token', token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(userData);
       
       return { success: true };
@@ -90,7 +112,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('Erreur déconnexion:', error);
     } finally {
       localStorage.removeItem('token');
-      delete axios.defaults.headers.common['Authorization'];
       setUser(null);
     }
   };

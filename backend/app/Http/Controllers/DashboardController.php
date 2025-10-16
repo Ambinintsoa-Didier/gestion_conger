@@ -6,10 +6,14 @@ namespace App\Http\Controllers;
 use App\Models\DemandeConge;
 use App\Models\Employe;
 use App\Models\User;
+use App\Models\Structure;
+use App\Models\TypeConge;
+use App\Models\JourFerie;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;  
+
 class DashboardController extends Controller
 {
     /**
@@ -113,7 +117,9 @@ class DashboardController extends Controller
     private function getStatsRH(User $user)
     {
         $totalEmployes = Employe::count();
-        $totalDemandes = DemandeConge::count();
+        $totalStructures = Structure::count();
+        $totalTypesConges = TypeConge::count();
+        $totalJoursFeries = JourFerie::count();
         
         $demandes = DemandeConge::all();
 
@@ -122,7 +128,10 @@ class DashboardController extends Controller
             
             // Statistiques globales
             'total_employes' => $totalEmployes,
-            'total_demandes' => $totalDemandes,
+            'total_structures' => $totalStructures,
+            'total_types_conges' => $totalTypesConges,
+            'total_jours_feries' => $totalJoursFeries,
+            'total_demandes' => $demandes->count(),
             'total_demandes_en_attente' => $demandes->where('idStatut', 1)->count(),
             'total_demandes_approuvees' => $demandes->where('idStatut', 2)->count(),
             'total_demandes_refusees' => $demandes->where('idStatut', 3)->count(),

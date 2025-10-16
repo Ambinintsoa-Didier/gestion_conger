@@ -1,4 +1,5 @@
 <?php
+// bootstrap/app.php
 
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -14,6 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
+        
+        // Ajouter l'alias pour le middleware CheckRole
+        $middleware->alias([
+            'check.role' => \App\Http\Middleware\CheckRole::class,
         ]);
         
         $middleware->validateCsrfTokens(except: [

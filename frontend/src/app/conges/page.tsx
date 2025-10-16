@@ -63,29 +63,40 @@ export default function CongesPage() {
   }, [user, router]);
 
   const loadData = async () => {
+  try {
+    setLoading(true);
+    
+    // Récupérer les données en parallèle
+    const [typesRes, demandesRes, statsRes] = await Promise.all([
+      axios.get('/conges/types'),
+      axios.get('/conges'),
+      axios.get('/dashboard/stats') // Utilisez la même endpoint que le dashboard
+    ]);
+
+    // Récupérer le solde depuis les stats comme dans le dashboard
+    const soldeConge = statsRes.data.stats?.solde_conge || 0;
+
+    setTypesConge(typesRes.data.types);
+    setDemandes(demandesRes.data.demandes);
+    setSolde(soldeConge);
+    
+  } catch (error: any) {
+    console.error('Erreur chargement données:', error);
+    
+    // En cas d'erreur, essayez de récupérer le solde via l'endpoint user comme fallback
     try {
-      setLoading(true);
-      
-      const [typesRes, demandesRes, soldeRes] = await Promise.all([
-        axios.get('/conges/types'),
-        axios.get('/conges'),
-        axios.get('/user')
-      ]);
-
-      const soldeConge = soldeRes.data.user?.employe?.soldeConge || 30;
-
-      setTypesConge(typesRes.data.types);
-      setDemandes(demandesRes.data.demandes);
+      const userRes = await axios.get('/user');
+      const soldeConge = userRes.data.user?.employe?.soldeConge || 0;
       setSolde(soldeConge);
-      
-    } catch (error: any) {
-      console.error('Erreur chargement données:', error);
-      setSolde(30);
-      alert('Erreur lors du chargement des données');
-    } finally {
-      setLoading(false);
+    } catch (fallbackError) {
+      setSolde(0);
     }
-  };
+    
+    alert('Erreur lors du chargement des données');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

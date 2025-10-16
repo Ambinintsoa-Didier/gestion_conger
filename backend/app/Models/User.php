@@ -1,4 +1,5 @@
 <?php
+// app/Models/User.php
 
 namespace App\Models;
 
@@ -19,12 +20,20 @@ class User extends Authenticatable
         'email',
         'motDePasse',
         'role',
-        'matricule_employe'
+        'matricule_employe',
+        'password_temp', // Nouveau champ
+        'must_change_password' // Nouveau champ
     ];
 
     protected $hidden = [
         'motDePasse',
         'remember_token',
+        'password_temp' // Caché par défaut
+    ];
+
+    protected $casts = [
+        'must_change_password' => 'boolean',
+        'email_verified_at' => 'datetime',
     ];
 
     public function getAuthPassword()
@@ -42,5 +51,18 @@ class User extends Authenticatable
     public function historiques()
     {
         return $this->hasMany(Historique::class, 'idUtilisateur');
+    }
+
+    // Méthode pour rendre le mot de passe temporaire visible
+    public function makePasswordTempVisible()
+    {
+        $this->makeVisible(['password_temp']);
+        return $this;
+    }
+
+    // Vérifier si l'utilisateur doit changer son mot de passe
+    public function needsPasswordChange()
+    {
+        return $this->must_change_password;
     }
 }

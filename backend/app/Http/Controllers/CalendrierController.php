@@ -1,5 +1,5 @@
 <?php
-// app/Http/Controllers/CalendrierController.php
+// app/Http\Controllers\CalendrierController.php
 
 namespace App\Http\Controllers;
 
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 class CalendrierController extends Controller
 {
     /**
-     * Récupère tous les congés validés pour le calendrier
+     * Récupère tous les congés validés pour le calendrier - FORMAT CORRIGÉ
      */
     public function getCongesCalendrier(Request $request)
     {
@@ -38,28 +38,22 @@ class CalendrierController extends Controller
                 ->map(function ($conge) {
                     return [
                         'id' => (string) $conge->idDemande,
-                        'title' => $conge->employe->prenom . ' ' . $conge->employe->nom,
+                        // FORMAT CORRIGÉ : propriétés directes comme attendu par le frontend
+                        'employe' => $conge->employe->prenom . ' ' . $conge->employe->nom,
+                        'matricule' => $conge->employe->matricule,
+                        'fonction' => $conge->employe->fonction,
+                        'structure' => $conge->employe->structure->nom ?? 'Non assigné',
+                        'typeConge' => $conge->typeConge->nom,
+                        'statut' => $conge->statut->libelle,
+                        'motif' => $conge->motif,
+                        'duree' => $conge->dateDebut->diffInDays($conge->dateFin) + 1,
                         'start' => $conge->dateDebut->format('Y-m-d'),
-                        'end' => Carbon::parse($conge->dateFin)->addDay()->format('Y-m-d'),
-                        'backgroundColor' => $this->getCongeColor($conge->typeConge->nom),
-                        'borderColor' => $this->getCongeColor($conge->typeConge->nom),
-                        'textColor' => '#ffffff',
-                        'extendedProps' => [
-                            'idDemande' => $conge->idDemande,
-                            'employe' => $conge->employe->prenom . ' ' . $conge->employe->nom,
-                            'matricule' => $conge->employe->matricule,
-                            'fonction' => $conge->employe->fonction,
-                            'structure' => $conge->employe->structure->nom ?? 'Non assigné',
-                            'typeConge' => $conge->typeConge->nom,
-                            'statut' => $conge->statut->libelle,
-                            'motif' => $conge->motif,
-                            'duree' => $conge->dateDebut->diffInDays($conge->dateFin) + 1
-                        ]
+                        'end' => $conge->dateFin->format('Y-m-d'), // CORRECTION : pas d'ajout de jour
                     ];
                 });
 
             return response()->json([
-                'conges' => $conges,
+                'conges' => $conges, // FORMAT CORRIGÉ
                 'filters' => [
                     'structures' => $this->getStructuresList(),
                     'typesConge' => $this->getTypesCongeList()
@@ -81,16 +75,16 @@ class CalendrierController extends Controller
     private function getCongeColor($typeConge)
     {
         $colors = [
-            'Congé Annuel' => '#3B82F6',      // Blue-500
-            'Congé Maladie' => '#60A5FA',     // Blue-400
-            'Congé Maternité' => '#2563EB',   // Blue-600
-            'Congé Paternité' => '#1D4ED8',   // Blue-700
-            'Congé Sans Solde' => '#93C5FD',  // Blue-300
-            'Congé Exceptionnel' => '#1E40AF', // Blue-800
-            'RTT' => '#1E3A8A',               // Blue-900
+            'Congé Annuel' => '#3B82F6',
+            'Congé Maladie' => '#60A5FA',
+            'Congé Maternité' => '#2563EB',
+            'Congé Paternité' => '#1D4ED8',
+            'Congé Sans Solde' => '#93C5FD',
+            'Congé Exceptionnel' => '#1E40AF',
+            'RTT' => '#1E3A8A',
         ];
 
-        return $colors[$typeConge] ?? '#6B7280'; // Gris par défaut
+        return $colors[$typeConge] ?? '#6B7280';
     }
 
     /**
@@ -110,7 +104,7 @@ class CalendrierController extends Controller
     }
 
     /**
-     * Filtrage des congés par structure/type
+     * Filtrage des congés par structure/type - FORMAT CORRIGÉ
      */
     public function filterConges(Request $request)
     {
@@ -120,6 +114,7 @@ class CalendrierController extends Controller
 
             $congesQuery = DemandeConge::with([
                 'employe', 
+                'employe.structure',
                 'typeConge', 
                 'statut'
             ])->where('idStatut', 2);
@@ -142,28 +137,22 @@ class CalendrierController extends Controller
                 ->map(function ($conge) {
                     return [
                         'id' => (string) $conge->idDemande,
-                        'title' => $conge->employe->prenom . ' ' . $conge->employe->nom,
+                        // FORMAT CORRIGÉ : propriétés directes
+                        'employe' => $conge->employe->prenom . ' ' . $conge->employe->nom,
+                        'matricule' => $conge->employe->matricule,
+                        'fonction' => $conge->employe->fonction,
+                        'structure' => $conge->employe->structure->nom ?? 'Non assigné',
+                        'typeConge' => $conge->typeConge->nom,
+                        'statut' => $conge->statut->libelle,
+                        'motif' => $conge->motif,
+                        'duree' => $conge->dateDebut->diffInDays($conge->dateFin) + 1,
                         'start' => $conge->dateDebut->format('Y-m-d'),
-                        'end' => Carbon::parse($conge->dateFin)->addDay()->format('Y-m-d'),
-                        'backgroundColor' => $this->getCongeColor($conge->typeConge->nom),
-                        'borderColor' => $this->getCongeColor($conge->typeConge->nom),
-                        'textColor' => '#ffffff',
-                        'extendedProps' => [
-                            'idDemande' => $conge->idDemande,
-                            'employe' => $conge->employe->prenom . ' ' . $conge->employe->nom,
-                            'matricule' => $conge->employe->matricule,
-                            'fonction' => $conge->employe->fonction,
-                            'structure' => $conge->employe->structure->nom ?? 'Non assigné',
-                            'typeConge' => $conge->typeConge->nom,
-                            'statut' => $conge->statut->libelle,
-                            'motif' => $conge->motif,
-                            'duree' => $conge->dateDebut->diffInDays($conge->dateFin) + 1
-                        ]
+                        'end' => $conge->dateFin->format('Y-m-d'),
                     ];
                 });
 
             return response()->json([
-                'conges' => $conges
+                'conges' => $conges // FORMAT CORRIGÉ
             ], 200);
 
         } catch (\Exception $e) {
@@ -175,6 +164,9 @@ class CalendrierController extends Controller
         }
     }
 
+    /**
+     * Filtrage par rôle
+     */
     private function applyRoleFilter($query, $user)
     {
         switch ($user->role) {

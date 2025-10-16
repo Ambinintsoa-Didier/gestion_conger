@@ -1,45 +1,32 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
-import FullCalendar from '@fullcalendar/react';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import interactionPlugin from '@fullcalendar/interaction';
-import listPlugin from '@fullcalendar/list';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import frLocale from '@fullcalendar/core/locales/fr';
-import { EventInput } from '@fullcalendar/core';
 
 // Shadcn components
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-interface CongeEvent extends EventInput {
+interface CongeEvent {
   id: string;
-  title: string;
+  employe: string;
+  matricule: string;
+  fonction: string;
+  structure: string;
+  typeConge: string;
+  statut: string;
+  motif: string;
+  duree: number;
   start: string;
   end: string;
-  backgroundColor: string;
-  borderColor: string;
-  textColor: string;
-  extendedProps: {
-    idDemande: number;
-    employe: string;
-    matricule: string;
-    fonction: string;
-    structure: string;
-    typeConge: string;
-    statut: string;
-    motif: string;
-    duree: number;
-  };
 }
 
 interface Filter {
@@ -47,74 +34,110 @@ interface Filter {
   type_conge_id?: number;
 }
 
-// Couleurs bleu pour les types de congé
 const TYPE_CONGE_COLORS: { [key: string]: string } = {
-  'Congé Annuel': '#3B82F6',      // Blue-500
-  'Congé Maladie': '#60A5FA',     // Blue-400
-  'Congé Maternité': '#2563EB',   // Blue-600
-  'Congé Paternité': '#1D4ED8',   // Blue-700
-  'Congé Sans Solde': '#93C5FD',  // Blue-300
-  'Congé Exceptionnel': '#1E40AF', // Blue-800
-  'RTT': '#1E3A8A',               // Blue-900
+  'Congé Annuel': '#3B82F6',
+  'Congé Maladie': '#EF4444',
+  'Congé Maternité': '#8B5CF6',
+  'Congé Paternité': '#06B6D4',
+  'Congé Sans Solde': '#6B7280',
+  'Congé Exceptionnel': '#F59E0B',
+  'RTT': '#10B981',
+};
+
+const STATUT_COLORS: { [key: string]: string } = {
+  'Validée': 'bg-green-100 text-green-800 border-green-200',
+  'En attente': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  'Refusée': 'bg-red-100 text-red-800 border-red-200',
 };
 
 export default function CalendrierPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const calendarRef = useRef<any>(null);
   
-  const [events, setEvents] = useState<CongeEvent[]>([]);
+  const [allEvents, setAllEvents] = useState<CongeEvent[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<CongeEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'listMonth'>('dayGridMonth');
   const [selectedEvent, setSelectedEvent] = useState<CongeEvent | null>(null);
   const [filters, setFilters] = useState<Filter>({});
+  const [searchTerm, setSearchTerm] = useState('');
   const [structures, setStructures] = useState<any[]>([]);
   const [typesConge, setTypesConge] = useState<any[]>([]);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [stats, setStats] = useState({
-    total_conges: 0,
-    conges_ce_mois: 0,
-    employes_en_conge: 0
-  });
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLegendOpen, setIsLegendOpen] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [activeView, setActiveView] = useState('liste');
 
   useEffect(() => {
     if (!user) {
       router.push('/login');
       return;
     }
-    loadCalendrierData();
-  }, [user, router, filters]);
+    loadAllConges();
+  }, [user, router]);
 
-  const loadCalendrierData = async () => {
+  useEffect(() => {
+    filterEvents();
+  }, [allEvents, currentDate, filters, searchTerm]);
+
+  const loadAllConges = async () => {
     try {
       setLoading(true);
-      const [calendrierRes, statsRes] = await Promise.all([
-        axios.get('/calendrier/conges'),
-        axios.get('/calendrier/stats')
-      ]);
       
-      const transformedEvents = calendrierRes.data.conges.map((event: any) => ({
-        ...event,
-        backgroundColor: TYPE_CONGE_COLORS[event.extendedProps.typeConge] || '#6B7280',
-        borderColor: TYPE_CONGE_COLORS[event.extendedProps.typeConge] || '#6B7280',
-        textColor: '#FFFFFF',
-      }));
+      const calendrierRes = await axios.get('/calendrier/conges');
       
-      setEvents(transformedEvents);
+      setAllEvents(calendrierRes.data.conges || []);
       setStructures(calendrierRes.data.filters?.structures || []);
       setTypesConge(calendrierRes.data.filters?.typesConge || []);
-      setStats(statsRes.data.stats || {});
     } catch (error: any) {
       console.error('Erreur chargement calendrier:', error);
-      alert('Erreur lors du chargement du calendrier');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEventClick = (clickInfo: any) => {
-    setSelectedEvent(clickInfo.event);
-    setIsSheetOpen(true);
+  const filterEvents = () => {
+    let filtered = allEvents;
+
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    
+    filtered = filtered.filter(event => {
+      const startDate = new Date(event.start);
+      const endDate = new Date(event.end);
+      
+      return (
+        (startDate.getFullYear() === currentYear && startDate.getMonth() === currentMonth) ||
+        (endDate.getFullYear() === currentYear && endDate.getMonth() === currentMonth) ||
+        (startDate <= new Date(currentYear, currentMonth + 1, 0) && endDate >= new Date(currentYear, currentMonth, 1))
+      );
+    });
+
+    if (filters.structure_id) {
+      filtered = filtered.filter(event => 
+        event.structure.toLowerCase().includes(
+          structures.find(s => s.idStructure === filters.structure_id)?.nom.toLowerCase() || ''
+        )
+      );
+    }
+
+    if (filters.type_conge_id) {
+      filtered = filtered.filter(event => 
+        event.typeConge.toLowerCase().includes(
+          typesConge.find(t => t.idType === filters.type_conge_id)?.nom.toLowerCase() || ''
+        )
+      );
+    }
+
+    if (searchTerm) {
+      filtered = filtered.filter(event => 
+        event.employe.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.fonction.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.structure.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.typeConge.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    setFilteredEvents(filtered);
   };
 
   const handleFilterChange = (filterType: keyof Filter, value: string) => {
@@ -127,293 +150,397 @@ export default function CalendrierPage() {
 
   const clearFilters = () => {
     setFilters({});
+    setSearchTerm('');
   };
 
-  const getEventContent = (eventInfo: any) => {
-    const eventType = eventInfo.event.extendedProps.typeConge;
-    const bgColor = TYPE_CONGE_COLORS[eventType] || '#6B7280';
+  const goToPreviousMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  const getMonthName = (date: Date) => {
+    return date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  };
+
+  const formatDateRange = (start: string, end: string) => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
     
-    return {
-      html: `
-        <div class="fc-event-content p-1 rounded text-white text-xs leading-tight" style="background: ${bgColor}; border-color: ${bgColor};">
-          <div class="font-semibold truncate">
-            ${eventInfo.event.title}
-          </div>
-          <div class="opacity-90 truncate">
-            ${eventType}
-          </div>
-        </div>
-      `
-    };
+    if (startDate.getMonth() === endDate.getMonth() && startDate.getFullYear() === endDate.getFullYear()) {
+      return `${startDate.getDate()} - ${endDate.getDate()} ${startDate.toLocaleDateString('fr-FR', { month: 'long' })} ${startDate.getFullYear()}`;
+    } else {
+      return `${startDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} - ${endDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
   };
 
-  const navigateToToday = () => {
-    if (calendarRef.current) {
-      const calendarApi = calendarRef.current.getApi();
-      calendarApi.today();
+  const handleEventClick = (event: CongeEvent) => {
+    setSelectedEvent(event);
+    setIsDialogOpen(true);
+  };
+
+  const getEventColor = (event: CongeEvent | null) => {
+    if (!event || !event.typeConge) return '#6B7280';
+    return TYPE_CONGE_COLORS[event.typeConge] || '#6B7280';
+  };
+
+  const getRoleColor = (role: string) => {
+    const colors: { [key: string]: string } = {
+      'admin': 'bg-red-100 text-red-800 border-red-200',
+      'rh': 'bg-purple-100 text-purple-800 border-purple-200',
+      'superieur': 'bg-blue-100 text-blue-800 border-blue-200',
+      'employe': 'bg-green-100 text-green-800 border-green-200'
+    };
+    return colors[role] || 'bg-gray-100 text-gray-800 border-gray-200';
+  };
+
+  // Générer les jours du mois pour la vue calendrier
+  const getDaysInMonth = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const days = [];
+
+    // Ajouter les jours du mois précédent pour compléter la première semaine
+    const firstDayOfWeek = firstDay.getDay();
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    
+    for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+      days.push({
+        date: new Date(year, month - 1, prevMonthLastDay - i),
+        isCurrentMonth: false,
+        events: []
+      });
     }
+
+    // Ajouter les jours du mois courant
+    for (let day = 1; day <= lastDay.getDate(); day++) {
+      const date = new Date(year, month, day);
+      const dayEvents = filteredEvents.filter(event => {
+        const eventStart = new Date(event.start);
+        const eventEnd = new Date(event.end);
+        return date >= eventStart && date <= eventEnd;
+      });
+      
+      days.push({
+        date,
+        isCurrentMonth: true,
+        events: dayEvents
+      });
+    }
+
+    // Ajouter les jours du mois suivant pour compléter la dernière semaine
+    const lastDayOfWeek = lastDay.getDay();
+    for (let i = 1; i < 7 - lastDayOfWeek; i++) {
+      days.push({
+        date: new Date(year, month + 1, i),
+        isCurrentMonth: false,
+        events: []
+      });
+    }
+
+    return days;
   };
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Chargement...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Chargement...</p>
         </div>
       </div>
     );
   }
 
+  const days = getDaysInMonth();
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* En-tête compacte */}
-      <header className="bg-card border-b shrink-0">
+      {/* En-tête cohérent avec le dashboard */}
+      <header className="bg-card border-b flex-shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
+          <div className="flex justify-between items-center py-3">
             <div className="flex items-center space-x-3">
               <Link 
                 href="/dashboard" 
-                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </Link>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold text-foreground truncate">Calendrier des Congés</h1>
-                <p className="text-muted-foreground text-sm truncate">
-                  {user.role === 'employe' ? 'Mes congés' : 'Congés de l\'équipe'}
-                </p>
+              <div className="flex items-center space-x-3">
+                <div>
+                  <h1 className="text-lg font-bold text-foreground">Calendrier des Congés</h1>
+                  <p className="text-xs text-muted-foreground">
+                    {getMonthName(currentDate)} • {user.role === 'employe' ? 'Mes congés' : 'Vue globale'}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center space-x-3 shrink-0">
-              <Badge variant="secondary" className="text-xs">
-                {view === 'dayGridMonth' ? 'Mois' : 
-                 view === 'timeGridWeek' ? 'Semaine' : 
-                 view === 'timeGridDay' ? 'Jour' : 'Liste'}
+              <Badge variant="secondary" className={getRoleColor(user.role)}>
+                {user.role === 'admin' ? 'Administrateur' : 
+                 user.role === 'rh' ? 'Ressources Humaines' :
+                 user.role === 'superieur' ? 'Supérieur Hiérarchique' : 'Employé'}
               </Badge>
-              <span className="text-muted-foreground text-sm hidden sm:inline">
-                {user.nom_complet}
-              </span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="text-sm text-muted-foreground">{user.nom_complet}</span>
+              <Button
+                onClick={() => setIsLegendOpen(true)}
+                variant="outline"
+                size="sm"
+              >
+                Légende
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Contenu principal */}
-      <main className="flex-1 flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
-        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 flex-1 flex flex-col">
-          
-          {/* Statistiques */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{stats.total_conges}</p>
-                    <p className="text-sm text-muted-foreground">Congés validés</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{stats.conges_ce_mois}</p>
-                    <p className="text-sm text-muted-foreground">Ce mois</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{stats.employes_en_conge}</p>
-                    <p className="text-sm text-muted-foreground">En congé actuellement</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Barre de contrôles */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-4 shrink-0">
-            <Select
-              value={filters.structure_id?.toString() || "all"}
-              onValueChange={(value) => handleFilterChange('structure_id', value)}
-            >
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Structure" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toutes les structures</SelectItem>
-                {structures.map((structure) => (
-                  <SelectItem key={structure.idStructure} value={structure.idStructure.toString()}>
-                    {structure.nom}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={filters.type_conge_id?.toString() || "all"}
-              onValueChange={(value) => handleFilterChange('type_conge_id', value)}
-            >
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Type de congé" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous les types</SelectItem>
-                {typesConge.map((type) => (
-                  <SelectItem key={type.idType} value={type.idType.toString()}>
-                    {type.nom}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={view}
-              onValueChange={(value: any) => setView(value)}
-            >
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Vue" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dayGridMonth">Mois</SelectItem>
-                <SelectItem value="timeGridWeek">Semaine</SelectItem>
-                <SelectItem value="timeGridDay">Jour</SelectItem>
-                <SelectItem value="listMonth">Liste</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="flex gap-2 lg:col-span-2">
-              <Button
-                onClick={navigateToToday}
-                variant="outline"
-                size="sm"
-                className="h-9 flex-1"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Aujourd'hui
-              </Button>
-              
-              <Button
-                onClick={clearFilters}
-                variant="outline"
-                size="sm"
-                className="h-9 flex-1"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Reset
-              </Button>
-
-              {/* Légende */}
-              <div className="relative group">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 px-3"
-                >
+      <main className="flex-1 max-w-7xl mx-auto w-full py-3 px-4 sm:px-6 lg:px-8">
+        {/* Barre de contrôle améliorée */}
+        <Card className="mb-3">
+          <CardContent className="p-3">
+            <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between">
+              {/* Navigation du mois */}
+              <div className="flex items-center gap-2">
+                <Button onClick={goToPreviousMonth} variant="outline" size="sm">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                 </Button>
-                <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-card border rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                  <h4 className="font-semibold text-sm mb-2">Légende des types de congé</h4>
-                  <div className="space-y-2 text-xs">
-                    {Object.entries(TYPE_CONGE_COLORS).map(([type, color]) => (
-                      <div key={type} className="flex items-center space-x-2">
-                        <div 
-                          className="w-3 h-3 rounded-full border"
-                          style={{ backgroundColor: color, borderColor: color }}
-                        />
-                        <span className="text-muted-foreground">{type}</span>
+                
+                <Button onClick={goToToday} variant="default" size="sm">
+                  Aujourd'hui
+                </Button>
+                
+                <Button onClick={goToNextMonth} variant="outline" size="sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Button>
+
+                <div className="px-3 py-1 bg-primary/10 rounded-lg border border-primary/20">
+                  <span className="font-semibold text-primary text-sm">
+                    {getMonthName(currentDate)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Vue switch */}
+              <Tabs value={activeView} onValueChange={setActiveView} className="w-auto">
+                <TabsList>
+                  <TabsTrigger value="calendrier">Vue Calendrier</TabsTrigger>
+                  <TabsTrigger value="liste">Vue Liste</TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {/* Recherche et filtres */}
+              <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                <Input
+                  placeholder="Rechercher un employé, service..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full lg:w-48 text-sm"
+                />
+                
+                <div className="flex gap-2">
+                  <Select
+                    value={filters.structure_id?.toString() || "all"}
+                    onValueChange={(value) => handleFilterChange('structure_id', value)}
+                  >
+                    <SelectTrigger className="w-32 text-sm">
+                      <SelectValue placeholder="Structure" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Toutes les structures</SelectItem>
+                      {structures.map((structure) => (
+                        <SelectItem key={structure.idStructure} value={structure.idStructure.toString()}>
+                          {structure.nom}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={filters.type_conge_id?.toString() || "all"}
+                    onValueChange={(value) => handleFilterChange('type_conge_id', value)}
+                  >
+                    <SelectTrigger className="w-32 text-sm">
+                      <SelectValue placeholder="Type de congé" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les types</SelectItem>
+                      {typesConge.map((type) => (
+                        <SelectItem key={type.idType} value={type.idType.toString()}>
+                          {type.nom}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Button onClick={clearFilters} variant="outline" size="sm" className="text-xs">
+                    Réinitialiser
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Contenu principal */}
+        <div className="h-[calc(100vh-180px)]">
+          <Card className="h-full">
+            <CardContent className="p-3 h-full">
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                    <p className="text-sm text-muted-foreground mt-2">Chargement du calendrier...</p>
+                  </div>
+                </div>
+              ) : activeView === 'calendrier' ? (
+                // Vue Calendrier
+                <div className="h-full flex flex-col">
+                  <div className="grid grid-cols-7 gap-1 mb-1 flex-shrink-0">
+                    {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
+                      <div key={day} className="text-center text-xs font-medium text-muted-foreground py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 flex-1 overflow-auto">
+                    {days.map((day, index) => (
+                      <div
+                        key={index}
+                        className={`min-h-[60px] border rounded p-1 ${
+                          day.isCurrentMonth 
+                            ? 'bg-card' 
+                            : 'bg-muted/20 text-muted-foreground'
+                        } ${
+                          day.date.toDateString() === new Date().toDateString() 
+                            ? 'border-primary ring-1 ring-primary' 
+                            : 'border-border'
+                        }`}
+                      >
+                        <div className="text-xs font-medium mb-1">
+                          {day.date.getDate()}
+                        </div>
+                        <div className="space-y-1 max-h-10 overflow-y-auto">
+                          {day.events.slice(0, 2).map((event, eventIndex) => (
+                            <div
+                              key={eventIndex}
+                              className="text-xs p-1 rounded cursor-pointer hover:opacity-80 transition-opacity"
+                              style={{ 
+                                backgroundColor: getEventColor(event),
+                                color: 'white'
+                              }}
+                              onClick={() => handleEventClick(event)}
+                              title={`${event.employe} - ${event.typeConge}`}
+                            >
+                              <div className="truncate font-medium text-[10px]">{event.employe.split(' ')[0]}</div>
+                            </div>
+                          ))}
+                          {day.events.length > 2 && (
+                            <div className="text-xs text-muted-foreground text-center">
+                              +{day.events.length - 2} autres
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Calendrier */}
-          <Card className="flex-1 min-h-0 overflow-hidden">
-            <CardContent className="p-4 h-full">
-              {loading ? (
-                <div className="flex flex-col items-center justify-center h-full">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
-                  <p className="text-muted-foreground text-sm">Chargement du calendrier...</p>
-                </div>
               ) : (
-                <div className="h-full" style={{ minHeight: '500px' }}>
-                  <FullCalendar
-                    ref={calendarRef}
-                    plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
-                    headerToolbar={{
-                      left: 'prev,next today',
-                      center: 'title',
-                      right: 'dayGridMonth,timeGridWeek,timeGridDay,listMonth'
-                    }}
-                    initialView={view}
-                    events={events as EventInput[]}
-                    eventClick={handleEventClick}
-                    eventContent={getEventContent}
-                    locale={frLocale}
-                    height="auto"
-                    eventDisplay="block"
-                    nowIndicator={true}
-                    editable={false}
-                    selectable={false}
-                    weekends={true}
-                    dayMaxEvents={3}
-                    eventMaxStack={2}
-                    views={{
-                      dayGridMonth: {
-                        dayMaxEvents: 3,
-                        eventMaxStack: 2,
-                      },
-                      timeGridWeek: {
-                        dayMaxEvents: 4,
-                        eventMaxStack: 2,
-                        slotMinTime: '08:00:00',
-                        slotMaxTime: '20:00:00'
-                      },
-                      timeGridDay: {
-                        dayMaxEvents: 6,
-                        eventMaxStack: 3,
-                        slotMinTime: '08:00:00', 
-                        slotMaxTime: '20:00:00'
-                      },
-                      listMonth: {
-                        listDayFormat: { weekday: 'short', day: 'numeric', month: 'short' },
-                      }
-                    }}
-                  />
+                // Vue Liste
+                <div className="h-full overflow-y-auto">
+                  {filteredEvents.length === 0 ? (
+                    <div className="text-center py-8 h-full flex items-center justify-center">
+                      <div>
+                        <svg className="mx-auto h-8 w-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-foreground">Aucun congé trouvé</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Aucun congé ne correspond à vos critères de recherche.
+                        </p>
+                        <Button onClick={clearFilters} variant="outline" size="sm" className="mt-2 text-xs">
+                          Voir tous les congés
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredEvents.map((event) => (
+                        <Card 
+                          key={event.id} 
+                          className="cursor-pointer transition-all duration-200 hover:shadow-sm hover:border-primary/50 border"
+                          onClick={() => handleEventClick(event)}
+                        >
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3 flex-1">
+                                <div 
+                                  className="w-2 h-10 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: getEventColor(event) }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="text-sm font-semibold text-foreground">
+                                      {event.employe || 'Employé'}
+                                    </h3>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {event.matricule || 'N/A'}
+                                    </Badge>
+                                    <Badge 
+                                      className={STATUT_COLORS[event.statut] || 'bg-gray-100 text-gray-800 border-gray-200'}
+                                    >
+                                      {event.statut}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>{event.fonction}</span>
+                                    <span>•</span>
+                                    <span>{event.structure}</span>
+                                    <span>•</span>
+                                    <span>{event.duree} jour(s)</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="text-right">
+                                <div className="flex items-center gap-2 mb-1 justify-end">
+                                  <Badge 
+                                    className="text-xs font-medium"
+                                    style={{ 
+                                      backgroundColor: getEventColor(event),
+                                      color: 'white'
+                                    }}
+                                  >
+                                    {event.typeConge}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center text-xs text-muted-foreground justify-end">
+                                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  {formatDateRange(event.start, event.end)}
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -421,220 +548,134 @@ export default function CalendrierPage() {
         </div>
       </main>
 
-      {/* Sheet de détails */}
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Détails du Congé</SheetTitle>
-            <SheetDescription>
-              Informations complètes sur la période de congé
-            </SheetDescription>
-          </SheetHeader>
-          
+      {/* Modal de détails */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-md">
           {selectedEvent && (
-            <div className="mt-6 space-y-6">
-              {/* En-tête */}
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-foreground">
-                  {selectedEvent.extendedProps.employe}
-                </h3>
-                <Badge 
-                  style={{ 
-                    backgroundColor: selectedEvent.backgroundColor as string,
-                    color: 'white'
-                  }}
-                >
-                  {selectedEvent.extendedProps.typeConge}
-                </Badge>
+            <>
+              <DialogHeader className="border-b pb-3">
+                <div className="flex items-center justify-between">
+                  <DialogTitle className="text-base font-bold">
+                    {selectedEvent.employe}
+                  </DialogTitle>
+                  <div className="flex items-center gap-2">
+                    <Badge 
+                      className="text-xs font-medium"
+                      style={{ 
+                        backgroundColor: getEventColor(selectedEvent),
+                        color: 'white'
+                      }}
+                    >
+                      {selectedEvent.typeConge}
+                    </Badge>
+                    <Badge 
+                      className={STATUT_COLORS[selectedEvent.statut] || 'bg-gray-100 text-gray-800 border-gray-200'}
+                    >
+                      {selectedEvent.statut}
+                    </Badge>
+                  </div>
+                </div>
+                <DialogDescription className="text-xs">
+                  Détails du congé
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3 py-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-foreground">Informations Employé</h4>
+                    <div className="space-y-1 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Matricule:</span>
+                        <p className="font-medium">{selectedEvent.matricule}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Fonction:</span>
+                        <p className="font-medium">{selectedEvent.fonction}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Structure:</span>
+                        <p className="font-medium">{selectedEvent.structure}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-foreground">Période de congé</h4>
+                    <div className="space-y-1 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Début:</span>
+                        <p className="font-medium">{new Date(selectedEvent.start).toLocaleDateString('fr-FR')}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Fin:</span>
+                        <p className="font-medium">{new Date(selectedEvent.end).toLocaleDateString('fr-FR')}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Durée:</span>
+                        <p className="font-medium">{selectedEvent.duree} jour(s)</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedEvent.motif && (
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-semibold text-foreground">Motif</h4>
+                    <p className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
+                      {selectedEvent.motif}
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <Tabs defaultValue="informations" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="informations">Informations</TabsTrigger>
-                  <TabsTrigger value="details">Détails</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="informations" className="space-y-4 mt-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="font-medium text-muted-foreground">Fonction:</span>
-                      <p className="text-foreground mt-1">{selectedEvent.extendedProps.fonction}</p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-muted-foreground">Structure:</span>
-                      <p className="text-foreground mt-1">{selectedEvent.extendedProps.structure}</p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-muted-foreground">Durée:</span>
-                      <p className="text-foreground mt-1">{selectedEvent.extendedProps.duree} jours</p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-muted-foreground">Statut:</span>
-                      <div className="mt-1">
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                          {selectedEvent.extendedProps.statut}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="details" className="space-y-4 mt-4">
-                  <div>
-                    <span className="font-medium text-muted-foreground block text-sm mb-2">Période:</span>
-                    <div className="bg-muted/30 rounded-lg p-3">
-                      <p className="text-foreground text-sm">
-                        <strong>Du</strong> {new Date(selectedEvent.start!).toLocaleDateString('fr-FR', { 
-                          weekday: 'long', 
-                          year: 'numeric', 
-                          month: 'long', 
-                          day: 'numeric' 
-                        })}
-                      </p>
-                      <p className="text-foreground text-sm mt-1">
-                        <strong>Au</strong> {new Date(selectedEvent.end!).toLocaleDateString('fr-FR', { 
-                          weekday: 'long', 
-                          year: 'numeric', 
-                          month: 'long', 
-                          day: 'numeric' 
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {selectedEvent.extendedProps.motif && (
-                    <div>
-                      <span className="font-medium text-muted-foreground block text-sm mb-2">Motif:</span>
-                      <div className="bg-muted/30 rounded-lg p-3">
-                        <p className="text-foreground text-sm leading-relaxed">
-                          {selectedEvent.extendedProps.motif}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-
-              <div className="flex space-x-2 pt-4 border-t">
+              <div className="flex justify-end space-x-2 pt-2 border-t">
                 <Button 
-                  onClick={() => setIsSheetOpen(false)}
-                  className="flex-1"
+                  onClick={() => setIsDialogOpen(false)}
+                  variant="outline"
+                  size="sm"
                 >
                   Fermer
                 </Button>
               </div>
-            </div>
+            </>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
-      {/* Styles globaux */}
-      <style jsx global>{`
-        .fc {
-          --fc-border-color: hsl(var(--border));
-          --fc-button-bg-color: hsl(var(--primary));
-          --fc-button-border-color: hsl(var(--primary));
-          --fc-button-hover-bg-color: hsl(var(--primary) / 0.9);
-          --fc-button-hover-border-color: hsl(var(--primary) / 0.9);
-          --fc-button-active-bg-color: hsl(var(--primary) / 0.8);
-          --fc-button-active-border-color: hsl(var(--primary) / 0.8);
-          --fc-today-bg-color: hsl(var(--muted) / 0.3);
-          --fc-page-bg-color: hsl(var(--background));
-          --fc-neutral-bg-color: hsl(var(--background));
-        }
-
-        .fc .fc-view-harness {
-          min-height: 400px;
-          max-height: 60vh;
-          overflow-y: auto !important;
-        }
-
-        .fc .fc-daygrid-body {
-          min-height: 500px;
-        }
-
-        .fc .fc-timegrid-body {
-          min-height: 400px;
-        }
-
-        .fc .fc-list {
-          min-height: 400px;
-          max-height: 60vh;
-          overflow-y: auto !important;
-        }
-
-        .fc .fc-toolbar {
-          padding: 8px 0;
-          margin-bottom: 8px;
-        }
-
-        .fc .fc-toolbar-title {
-          font-size: 1.1rem;
-          font-weight: 600;
-        }
-
-        .fc-button {
-          padding: 6px 12px;
-          font-size: 0.875rem;
-        }
-
-        .fc-event {
-          border: none;
-          border-radius: 4px;
-          font-weight: 500;
-          margin: 1px;
-          transition: all 0.2s ease-in-out;
-        }
-
-        .fc-event:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .fc-day-today {
-          background: hsl(var(--muted) / 0.2) !important;
-        }
-
-        .fc-col-header-cell {
-          background: hsl(var(--muted) / 0.3);
-          padding: 8px 0;
-          font-weight: 600;
-          font-size: 0.875rem;
-        }
-
-        .fc-daygrid-day-number {
-          font-weight: 500;
-          padding: 4px;
-          font-size: 0.875rem;
-        }
-
-        @media (max-width: 768px) {
-          .fc-toolbar {
-            flex-direction: column;
-            gap: 0.5rem;
-          }
+      {/* Modal de légende */}
+      <Dialog open={isLegendOpen} onOpenChange={setIsLegendOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Légende des types de congés</DialogTitle>
+            <DialogDescription className="text-xs">
+              Couleurs utilisées dans le calendrier
+            </DialogDescription>
+          </DialogHeader>
           
-          .fc-toolbar-chunk {
-            width: 100%;
-            display: flex;
-            justify-content: center;
-          }
-          
-          .fc .fc-toolbar-title {
-            font-size: 1rem;
-            text-align: center;
-          }
+          <div className="space-y-2 py-2">
+            {Object.entries(TYPE_CONGE_COLORS).map(([type, color]) => (
+              <div key={type} className="flex items-center space-x-3">
+                <div 
+                  className="w-4 h-4 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="text-sm text-foreground">{type}</span>
+              </div>
+            ))}
+          </div>
 
-          .fc-button {
-            padding: 4px 8px;
-            font-size: 0.75rem;
-          }
-
-          .fc .fc-view-harness {
-            max-height: 50vh;
-          }
-        }
-      `}</style>
+          <div className="flex justify-end pt-2 border-t">
+            <Button 
+              onClick={() => setIsLegendOpen(false)}
+              variant="outline"
+              size="sm"
+            >
+              Fermer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

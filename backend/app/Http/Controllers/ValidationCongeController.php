@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DemandeConge;
 use App\Models\Employe;
 use App\Models\Historique;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -181,6 +182,9 @@ class ValidationCongeController extends Controller
             'details' => "Demande #{$demande->idDemande} validée par {$user->nom_complet}. Solde déduit: {$nombreJours} jours"
         ]);
 
+        // 🔔 NOTIFICATION : Notifie l'employé du changement de statut
+        NotificationService::notifierChangementStatutDemande($demande);
+
         DB::commit();
 
         return response()->json([
@@ -255,6 +259,9 @@ class ValidationCongeController extends Controller
                 'action' => 'Demande de congé refusée',
                 'details' => "Demande #{$demande->idDemande} de {$demande->employe->prenom} {$demande->employe->nom} refusée"
             ]);
+
+            // 🔔 NOTIFICATION : Notifie l'employé du changement de statut
+            NotificationService::notifierChangementStatutDemande($demande);
 
             DB::commit();
 

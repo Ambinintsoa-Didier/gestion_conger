@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
+import { NotificationBell } from '@/components/NotificationBell';
 
 // Shadcn components
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -113,14 +114,15 @@ export default function Dashboard() {
               </Badge>
             </div>
             <div className="flex items-center space-x-3">
-              <Button
-                onClick={logout}
-                variant="destructive"
-                size="sm"
-              >
-                Déconnexion
-              </Button>
-            </div>
+            <NotificationBell /> {/* 👈 COMPOSANT AJOUTÉ */}
+            <Button
+              onClick={logout}
+              variant="destructive"
+              size="sm"
+            >
+              Déconnexion
+            </Button>
+          </div>
           </div>
         </div>
       </header>

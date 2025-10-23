@@ -14,6 +14,7 @@ use App\Http\Controllers\RH\StructureController;
 use App\Http\Controllers\RH\TypeCongeController;
 use App\Http\Controllers\RH\JourFerieController;
 use App\Http\Controllers\RH\StatistiqueController;
+use App\Http\Controllers\NotificationController;   
 
 Route::get('/test', function () {
     return response()->json(['message' => 'API Laravel 12 fonctionne !']);
@@ -97,6 +98,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/demandes/en-attente', [StatistiqueController::class, 'getDemandesEnAttente']);
         Route::get('/demandes/validees', [StatistiqueController::class, 'getDemandesValidees']);
         Route::get('/demandes/refusees', [StatistiqueController::class, 'getDemandesRefusees']);
+    });
+       
+    // 🔔 ROUTES POUR LES NOTIFICATIONS
+    Route::prefix('notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index']);
+        Route::get('/non-lues', [NotificationController::class, 'nombreNonLues']);
+        Route::post('/{idNotification}/marquer-lue', [NotificationController::class, 'marquerCommeLue']);
+        Route::post('/marquer-toutes-lues', [NotificationController::class, 'marquerToutesCommeLues']);
     });
 
     // Routes RH compatibilité (à supprimer progressivement)

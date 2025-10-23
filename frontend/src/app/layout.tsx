@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ToastProvider } from '@/contexts/ToastContext'; // 👈 IMPORT AJOUTÉ
+import { ToastContainer } from '@/components/Toast'; // 👈 IMPORT AJOUTÉ
+import { NotificationProvider } from '../contexts/NotificationContext'; // 👈 IMPORT AJOUTÉ
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -29,7 +32,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          {children}
+          <ToastProvider> {/* 👈 PROVIDER AJOUTÉ */}
+            <NotificationProvider> {/* 👈 PROVIDER AJOUTÉ */}
+              {children}
+              <ToastContainer /> {/* 👈 COMPOSANT TOAST AJOUTÉ ICI */}
+            </NotificationProvider>
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>

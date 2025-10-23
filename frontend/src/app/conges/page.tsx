@@ -302,14 +302,6 @@ export default function CongesPage() {
                 <TabsContent value="historique" className="space-y-6 mt-6">
                   <div className="flex justify-between items-center">
                     <h3 className="text-lg font-semibold text-foreground">Historique de mes demandes</h3>
-                    <Button onClick={() => {
-                      const nouvelleTab = document.querySelector('[data-value="nouvelle"]') as HTMLElement;
-                      if (nouvelleTab) {
-                        nouvelleTab.click();
-                      }
-                    }}>
-                      Nouvelle demande
-                    </Button>
                   </div>
                   
                   {loading ? (

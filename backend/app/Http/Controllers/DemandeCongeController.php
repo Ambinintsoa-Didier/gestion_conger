@@ -7,10 +7,12 @@ use App\Models\TypeConge;
 use App\Models\StatutDemande;
 use App\Models\JourFerie;
 use App\Models\Historique;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+
 
 class DemandeCongeController extends Controller
 {
@@ -193,6 +195,9 @@ class DemandeCongeController extends Controller
                 'action' => 'Demande de congé créée',
                 'details' => "Demande #{$demande->idDemande} pour {$dateDebut->format('d/m/Y')} au {$dateFin->format('d/m/Y')}"
             ]);
+
+            // 🔔 NOTIFICATION : Notifie le supérieur hiérarchique
+            NotificationService::notifierNouvelleDemandeConges($demande);
 
             DB::commit();
 

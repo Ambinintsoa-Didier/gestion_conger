@@ -11,7 +11,7 @@ class TypeCongeSeeder extends Seeder
     public function run()
     {
         $types = [
-            ['nom' => 'Congé Annuel', 'nombreJour' => 25],
+            ['nom' => 'Congé Annuel', 'nombreJour' => 30],
             ['nom' => 'Maladie', 'nombreJour' => 30],
             ['nom' => 'Maternité', 'nombreJour' => 98],
             ['nom' => 'Paternité', 'nombreJour' => 11],

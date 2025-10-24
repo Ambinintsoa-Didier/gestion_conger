@@ -16,7 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+// Interfaces pour le typage TypeScript
 interface Employe {
   matricule: string;
   nom: string;
@@ -38,6 +40,7 @@ interface Employe {
     prenom: string;
   };
   user?: {
+    idUtilisateur: number;
     email: string;
     role: string;
     password_temp?: string;
@@ -51,8 +54,7 @@ interface Structure {
   type: string;
 }
 
-interface FormData {
-  matricule: string;
+interface FormDataEmploye {
   nom: string;
   prenom: string;
   sexe: 'M' | 'F';
@@ -61,6 +63,10 @@ interface FormData {
   dateEmbauche: string;
   idStructure: number;
   superieur_id: string;
+}
+
+interface FormDataUtilisateur {
+  matricule_employe: string;
   email: string;
   role: 'employe' | 'superieur' | 'rh' | 'admin';
   genererMotDePasse: boolean;
@@ -80,7 +86,6 @@ const FONCTION_CODES: { [key: string]: string } = {
   // Informatique
   'Responsable IT': 'IT',
   'Développeur': 'DEV',
-  'Développeuse': 'DEV',
   'Technicien Support': 'TECH',
   'Administrateur Réseau': 'NET',
   
@@ -101,35 +106,47 @@ const FONCTION_CODES: { [key: string]: string } = {
   'default': 'EMP'
 };
 
-type SortField = 'nom' | 'prenom' | 'fonction' | 'structure' | 'matricule' | 'dateEmbauche';
+type SortField = 'nom' | 'prenom' | 'fonction' | 'structure' | 'matricule' | 'dateEmbauche' | 'email' | 'role';
 type SortOrder = 'asc' | 'desc';
+type ActiveTab = 'employes' | 'utilisateurs';
 
-export default function GestionEmployes() {
+export default function GestionUtilisateurs() {
   const { user } = useAuth();
   const router = useRouter();
   
+  // États principaux
   const [employes, setEmployes] = useState<Employe[]>([]);
   const [structures, setStructures] = useState<Structure[]>([]);
   const [superieurs, setSuperieurs] = useState<Employe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('employes');
+  
+  // États pour les modales
+  const [dialogEmployeOpen, setDialogEmployeOpen] = useState(false);
+  const [dialogUtilisateurOpen, setDialogUtilisateurOpen] = useState(false);
   const [selectedEmploye, setSelectedEmploye] = useState<Employe | null>(null);
+  
+  // États pour la recherche et filtres
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStructure, setFilterStructure] = useState<string>('all');
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  
+  // États pour le tri
   const [sortField, setSortField] = useState<SortField>('nom');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  
+  // États pour les mots de passe temporaires
   const [showTempPassword, setShowTempPassword] = useState<string>('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [tempPasswordData, setTempPasswordData] = useState<{employe: string, password: string} | null>(null);
   
-  // État pour la pagination
+  // États pour la pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(5);
 
-  const [formData, setFormData] = useState<FormData>({
-    matricule: '',
+  // États pour les formulaires
+  const [formDataEmploye, setFormDataEmploye] = useState<FormDataEmploye>({
     nom: '',
     prenom: '',
     sexe: 'M',
@@ -137,7 +154,11 @@ export default function GestionEmployes() {
     soldeConge: 25,
     dateEmbauche: new Date().toISOString().split('T')[0],
     idStructure: 0,
-    superieur_id: '',
+    superieur_id: ''
+  });
+
+  const [formDataUtilisateur, setFormDataUtilisateur] = useState<FormDataUtilisateur>({
+    matricule_employe: '',
     email: '',
     role: 'employe',
     genererMotDePasse: true,
@@ -145,7 +166,9 @@ export default function GestionEmployes() {
   });
 
   const [editing, setEditing] = useState(false);
+  const [generatedMatricule, setGeneratedMatricule] = useState('');
 
+  // Chargement des données au montage du composant
   useEffect(() => {
     if (!user || (user.role !== 'rh' && user.role !== 'admin')) {
       router.push('/dashboard');
@@ -154,6 +177,7 @@ export default function GestionEmployes() {
     loadData();
   }, [user, router]);
 
+  // Fonction pour charger toutes les données
   const loadData = async () => {
     try {
       setLoading(true);
@@ -174,7 +198,7 @@ export default function GestionEmployes() {
         throw new Error(structuresRes.data.message);
       }
       
-      // Filtrer les supérieurs
+      // Filtrer les supérieurs (ceux qui peuvent être supérieurs hiérarchiques)
       const superieursList = employesRes.data.employes.filter((emp: Employe) => 
         emp.user?.role === 'superieur' || emp.user?.role === 'rh' || emp.user?.role === 'admin'
       );
@@ -204,6 +228,7 @@ export default function GestionEmployes() {
     return `${codeFonction}${anneeEmbauche}${numero}`;
   };
 
+  // Obtenir les fonctions disponibles par structure
   const getFonctionsParStructure = () => {
     const fonctionsParStructure: { [key: number]: string[] } = {};
     
@@ -222,6 +247,7 @@ export default function GestionEmployes() {
     return fonctionsParStructure;
   };
 
+  // Fonctions par défaut selon le type de structure
   const getFonctionsParDefaut = (typeStructure: string) => {
     switch (typeStructure) {
       case 'Direction':
@@ -235,6 +261,7 @@ export default function GestionEmployes() {
     }
   };
 
+  // Déterminer automatiquement le supérieur hiérarchique
   const getSuperieurAutomatique = (idStructure: number): string => {
     const structure = structures.find(s => s.idStructure === idStructure);
     if (!structure) return '';
@@ -243,6 +270,7 @@ export default function GestionEmployes() {
       return '';
     }
 
+    // Chercher un responsable dans la même structure
     const responsable = employes.find(emp => 
       emp.idStructure === idStructure && 
       (emp.fonction.includes('Responsable') || emp.fonction.includes('Chef') || emp.fonction.includes('Directeur')) &&
@@ -253,17 +281,20 @@ export default function GestionEmployes() {
       return responsable.matricule;
     }
 
+    // Sinon, prendre le directeur général
     const directeur = employes.find(emp => emp.fonction === 'Directeur Général');
     return directeur?.matricule || '';
   };
 
+  // Afficher temporairement le mot de passe
   const showPasswordTemporarily = (matricule: string) => {
     setShowTempPassword(matricule);
     setTimeout(() => {
       setShowTempPassword('');
-    }, 10000);
+    }, 10000); // 10 secondes
   };
 
+  // Réinitialiser le mot de passe d'un utilisateur
   const reinitialiserMotDePasse = async (employe: Employe) => {
     try {
       const response = await axios.post(`rh/employes/${employe.matricule}/reset-password`);
@@ -273,6 +304,7 @@ export default function GestionEmployes() {
           password: response.data.tempPassword
         });
         setShowPasswordModal(true);
+        setSuccess('Mot de passe réinitialisé avec succès');
         loadData();
       }
     } catch (error: any) {
@@ -280,20 +312,56 @@ export default function GestionEmployes() {
     }
   };
 
-  const sortedAndFilteredEmployes = employes
-    .filter(employe => {
+  // Créer un compte utilisateur pour un employé
+  const creerCompteUtilisateur = async (employe: Employe) => {
+    try {
+      // Générer un email par défaut
+      const email = `${employe.prenom.toLowerCase()}.${employe.nom.toLowerCase()}@spat.com`;
+      
+      const response = await axios.post('rh/utilisateurs', {
+        matricule_employe: employe.matricule,
+        email: email,
+        role: 'employe',
+        genererMotDePasse: true
+      });
+
+      if (response.data.success) {
+        setTempPasswordData({
+          employe: `${employe.prenom} ${employe.nom}`,
+          password: response.data.tempPassword
+        });
+        setShowPasswordModal(true);
+        setSuccess('Compte utilisateur créé avec succès');
+        loadData();
+      }
+    } catch (error: any) {
+      setError('Erreur lors de la création du compte utilisateur');
+    }
+  };
+
+  // Filtrer et trier les données selon l'onglet actif
+  const getFilteredData = () => {
+    let data = activeTab === 'employes' 
+      ? employes 
+      : employes.filter(emp => emp.user); // Seulement les employés avec compte utilisateur
+
+    // Filtre de recherche
+    data = data.filter(item => {
       const matchesSearch = 
-        employe.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employe.prenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employe.matricule.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        employe.fonction.toLowerCase().includes(searchTerm.toLowerCase());
+        item.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.prenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.matricule.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.fonction.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.user?.email && item.user.email.toLowerCase().includes(searchTerm.toLowerCase()));
 
       const matchesStructure = filterStructure === 'all' || 
-        employe.idStructure.toString() === filterStructure;
+        item.idStructure.toString() === filterStructure;
 
       return matchesSearch && matchesStructure;
-    })
-    .sort((a, b) => {
+    });
+
+    // Tri
+    data.sort((a, b) => {
       let aValue: any;
       let bValue: any;
 
@@ -322,6 +390,14 @@ export default function GestionEmployes() {
           aValue = new Date(a.dateEmbauche);
           bValue = new Date(b.dateEmbauche);
           break;
+        case 'email':
+          aValue = a.user?.email.toLowerCase() || '';
+          bValue = b.user?.email.toLowerCase() || '';
+          break;
+        case 'role':
+          aValue = a.user?.role.toLowerCase() || '';
+          bValue = b.user?.role.toLowerCase() || '';
+          break;
         default:
           return 0;
       }
@@ -331,17 +407,22 @@ export default function GestionEmployes() {
       return 0;
     });
 
+    return data;
+  };
+
+  const filteredData = getFilteredData();
+
   // Calcul de la pagination
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = sortedAndFilteredEmployes.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(sortedAndFilteredEmployes.length / itemsPerPage);
+  const currentItems = filteredData.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
-  const resetForm = () => {
-    setFormData({
-      matricule: '',
+  // Réinitialiser les formulaires
+  const resetFormEmploye = () => {
+    setFormDataEmploye({
       nom: '',
       prenom: '',
       sexe: 'M',
@@ -349,21 +430,27 @@ export default function GestionEmployes() {
       soldeConge: 25,
       dateEmbauche: new Date().toISOString().split('T')[0],
       idStructure: structures[0]?.idStructure || 0,
-      superieur_id: '',
+      superieur_id: ''
+    });
+    setGeneratedMatricule('');
+    setEditing(false);
+    setSelectedEmploye(null);
+  };
+
+  const resetFormUtilisateur = () => {
+    setFormDataUtilisateur({
+      matricule_employe: '',
       email: '',
       role: 'employe',
       genererMotDePasse: true,
       motDePasse: ''
     });
-    setEditing(false);
-    setSelectedEmploye(null);
-    setError('');
   };
 
-  const handleOpenDialog = (employe?: Employe) => {
+  // Ouvrir les modales
+  const handleOpenDialogEmploye = (employe?: Employe) => {
     if (employe) {
-      setFormData({
-        matricule: employe.matricule,
+      setFormDataEmploye({
         nom: employe.nom,
         prenom: employe.prenom,
         sexe: employe.sexe,
@@ -371,30 +458,45 @@ export default function GestionEmployes() {
         soldeConge: employe.soldeConge,
         dateEmbauche: employe.dateEmbauche.split('T')[0],
         idStructure: employe.idStructure,
-        superieur_id: employe.superieur_id || '',
-        email: employe.user?.email || '',
-        role: (employe.user?.role as 'employe' | 'superieur' | 'rh' | 'admin') || 'employe',
-        genererMotDePasse: false,
-        motDePasse: ''
+        superieur_id: employe.superieur_id || ''
       });
+      setGeneratedMatricule(employe.matricule);
       setEditing(true);
       setSelectedEmploye(employe);
     } else {
-      resetForm();
+      resetFormEmploye();
     }
-    setDialogOpen(true);
+    setDialogEmployeOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleOpenDialogUtilisateur = (employe: Employe) => {
+    setFormDataUtilisateur({
+      matricule_employe: employe.matricule,
+      email: `${employe.prenom.toLowerCase()}.${employe.nom.toLowerCase()}@spat.com`,
+      role: 'employe',
+      genererMotDePasse: true,
+      motDePasse: ''
+    });
+    setSelectedEmploye(employe);
+    setDialogUtilisateurOpen(true);
+  };
+
+  // Soumettre les formulaires
+  const handleSubmitEmploye = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
     try {
-      const dataToSubmit = { ...formData };
+      let dataToSubmit: any = { ...formDataEmploye };
+      
       if (!editing) {
-        dataToSubmit.matricule = genererMatriculeAutomatique(formData.fonction, formData.dateEmbauche);
-        dataToSubmit.superieur_id = getSuperieurAutomatique(formData.idStructure);
+        // Génération automatique du matricule pour les nouveaux employés
+        const matriculeGenere = genererMatriculeAutomatique(formDataEmploye.fonction, formDataEmploye.dateEmbauche);
+        dataToSubmit.matricule = matriculeGenere;
+        dataToSubmit.superieur_id = getSuperieurAutomatique(formDataEmploye.idStructure);
+      } else {
+        dataToSubmit.matricule = selectedEmploye?.matricule;
       }
 
       if (editing) {
@@ -407,23 +509,14 @@ export default function GestionEmployes() {
       } else {
         const response = await axios.post('rh/employes', dataToSubmit);
         if (response.data.success) {
-          if (response.data.tempPassword) {
-            setTempPasswordData({
-              employe: `${formData.prenom} ${formData.nom}`,
-              password: response.data.tempPassword
-            });
-            setShowPasswordModal(true);
-            setSuccess('Employé créé avec succès !');
-          } else {
-            setSuccess('Employé créé avec succès');
-          }
+          setSuccess('Employé créé avec succès');
         } else {
           throw new Error(response.data.message);
         }
       }
       
-      setDialogOpen(false);
-      resetForm();
+      setDialogEmployeOpen(false);
+      resetFormEmploye();
       loadData();
     } catch (error: any) {
       console.error('Erreur sauvegarde employé:', error);
@@ -436,18 +529,46 @@ export default function GestionEmployes() {
     }
   };
 
-  const genererEmail = () => {
-    if (formData.prenom && formData.nom) {
-      const email = `${formData.prenom.toLowerCase()}.${formData.nom.toLowerCase()}@spat.com`;
-      setFormData(prev => ({ ...prev, email }));
+  const handleSubmitUtilisateur = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await axios.post('rh/utilisateurs', formDataUtilisateur);
+      
+      if (response.data.success) {
+        if (response.data.tempPassword) {
+          setTempPasswordData({
+            employe: `${selectedEmploye?.prenom} ${selectedEmploye?.nom}`,
+            password: response.data.tempPassword
+          });
+          setShowPasswordModal(true);
+        }
+        setSuccess('Compte utilisateur créé avec succès');
+        setDialogUtilisateurOpen(false);
+        resetFormUtilisateur();
+        loadData();
+      } else {
+        throw new Error(response.data.message);
+      }
+    } catch (error: any) {
+      console.error('Erreur création utilisateur:', error);
+      if (error.response?.data?.errors) {
+        const errors = Object.values(error.response.data.errors).flat();
+        setError(errors.join(', '));
+      } else {
+        setError(error.response?.data?.message || 'Erreur lors de la création du compte');
+      }
     }
   };
 
+  // Gestion des changements de structure
   const handleStructureChange = (idStructure: string) => {
     const newIdStructure = parseInt(idStructure);
     const superieurAuto = getSuperieurAutomatique(newIdStructure);
     
-    setFormData(prev => ({
+    setFormDataEmploye(prev => ({
       ...prev,
       idStructure: newIdStructure,
       superieur_id: superieurAuto,
@@ -455,6 +576,18 @@ export default function GestionEmployes() {
     }));
   };
 
+  // Gestion du changement de fonction pour générer le matricule
+  const handleFonctionChange = (fonction: string) => {
+    setFormDataEmploye(prev => ({ ...prev, fonction }));
+    
+    // Générer le matricule en temps réel si tous les champs sont remplis
+    if (fonction && formDataEmploye.dateEmbauche && !editing) {
+      const matriculeGenere = genererMatriculeAutomatique(fonction, formDataEmploye.dateEmbauche);
+      setGeneratedMatricule(matriculeGenere);
+    }
+  };
+
+  // Gestion du tri
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -462,11 +595,20 @@ export default function GestionEmployes() {
       setSortField(field);
       setSortOrder('asc');
     }
+    setCurrentPage(1); // Retour à la première page après tri
   };
 
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) return '↕️';
     return sortOrder === 'asc' ? '↑' : '↓';
+  };
+
+  // Générer email automatiquement
+  const genererEmail = () => {
+    if (selectedEmploye) {
+      const email = `${selectedEmploye.prenom.toLowerCase()}.${selectedEmploye.nom.toLowerCase()}@spat.com`;
+      setFormDataUtilisateur(prev => ({ ...prev, email }));
+    }
   };
 
   const fonctionsParStructure = getFonctionsParStructure();
@@ -490,23 +632,29 @@ export default function GestionEmployes() {
                 </svg>
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">Gestion des Employés</h1>
+                <h1 className="text-2xl font-bold text-foreground">Gestion des Utilisateurs</h1>
                 <p className="text-sm text-muted-foreground">
-                  Ajouter ou modifier des employés
+                  Gérez les employés et leurs comptes utilisateurs
                 </p>
               </div>
             </div>
-            <Button onClick={() => handleOpenDialog()}>
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Nouvel Employé
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => handleOpenDialogEmploye()}
+                variant="outline"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Nouvel Employé
+              </Button>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {/* Messages d'alerte */}
         {error && (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription>{error}</AlertDescription>
@@ -518,249 +666,422 @@ export default function GestionEmployes() {
           </Alert>
         )}
 
-        {/* Boîte de recherche réduite */}
-        <Card className="mb-6">
-          <CardContent className="p-3">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Input
-                placeholder="Rechercher un employé..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 text-sm"
-              />
-              <Select value={filterStructure} onValueChange={setFilterStructure}>
-                <SelectTrigger className="w-full sm:w-40 text-sm">
-                  <SelectValue placeholder="Toutes les structures" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les structures</SelectItem>
-                  {structures.map((structure) => (
-                    <SelectItem key={structure.idStructure} value={structure.idStructure.toString()}>
-                      {structure.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={`${sortField}-${sortOrder}`} onValueChange={(value) => {
-                const [field, order] = value.split('-') as [SortField, SortOrder];
-                setSortField(field);
-                setSortOrder(order);
-              }}>
-                <SelectTrigger className="w-full sm:w-40 text-sm">
-                  <SelectValue placeholder="Trier par" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="nom-asc">Nom (A-Z)</SelectItem>
-                  <SelectItem value="nom-desc">Nom (Z-A)</SelectItem>
-                  <SelectItem value="prenom-asc">Prénom (A-Z)</SelectItem>
-                  <SelectItem value="prenom-desc">Prénom (Z-A)</SelectItem>
-                  <SelectItem value="fonction-asc">Fonction (A-Z)</SelectItem>
-                  <SelectItem value="fonction-desc">Fonction (Z-A)</SelectItem>
-                  <SelectItem value="structure-asc">Structure (A-Z)</SelectItem>
-                  <SelectItem value="structure-desc">Structure (Z-A)</SelectItem>
-                  <SelectItem value="matricule-asc">Matricule (A-Z)</SelectItem>
-                  <SelectItem value="matricule-desc">Matricule (Z-A)</SelectItem>
-                  <SelectItem value="dateEmbauche-asc">Date embauche (ancien)</SelectItem>
-                  <SelectItem value="dateEmbauche-desc">Date embauche (récent)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Navigation par onglets */}
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ActiveTab)} className="mb-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="employes" className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+              </svg>
+              Employés ({employes.length})
+            </TabsTrigger>
+            <TabsTrigger value="utilisateurs" className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              Comptes Utilisateurs ({employes.filter(emp => emp.user).length})
+            </TabsTrigger>
+          </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Liste des Employés</CardTitle>
-            <CardDescription>
-              {sortedAndFilteredEmployes.length} employé(s) trouvé(s) - Page {currentPage} sur {totalPages}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : sortedAndFilteredEmployes.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Aucun employé trouvé
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <Table className="text-sm">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-20 cursor-pointer hover:bg-accent" onClick={() => handleSort('matricule')}>
-                          <div className="flex items-center gap-1 text-xs">
-                            Matricule {getSortIcon('matricule')}
-                          </div>
-                        </TableHead>
-                        <TableHead className="w-40 cursor-pointer hover:bg-accent" onClick={() => handleSort('nom')}>
-                          <div className="flex items-center gap-1 text-xs">
-                            Nom & Prénom {getSortIcon('nom')}
-                          </div>
-                        </TableHead>
-                        <TableHead className="w-32 cursor-pointer hover:bg-accent" onClick={() => handleSort('fonction')}>
-                          <div className="flex items-center gap-1 text-xs">
-                            Fonction {getSortIcon('fonction')}
-                          </div>
-                        </TableHead>
-                        <TableHead className="w-32 cursor-pointer hover:bg-accent" onClick={() => handleSort('structure')}>
-                          <div className="flex items-center gap-1 text-xs">
-                            Structure {getSortIcon('structure')}
-                          </div>
-                        </TableHead>
-                        <TableHead className="w-20 text-xs">Solde</TableHead>
-                        <TableHead className="w-20 text-xs">Rôle</TableHead>
-                        <TableHead className="w-28 text-xs">Mot de passe</TableHead>
-                        <TableHead className="w-24 cursor-pointer hover:bg-accent" onClick={() => handleSort('dateEmbauche')}>
-                          <div className="flex items-center gap-1 text-xs">
-                            Embauche {getSortIcon('dateEmbauche')}
-                          </div>
-                        </TableHead>
-                        <TableHead className="w-32 text-right text-xs">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {currentItems.map((employe) => (
-                        <TableRow key={employe.matricule} className="text-xs">
-                          <TableCell className="font-mono text-xs py-2">{employe.matricule}</TableCell>
-                          <TableCell className="py-2">
-                            <div>
-                              <div className="font-medium text-xs">
-                                {employe.nom} {employe.prenom}
+          {/* Contenu des onglets */}
+          <TabsContent value="employes">
+            <Card>
+              <CardHeader>
+                <CardTitle>Liste des Employés</CardTitle>
+                <CardDescription>
+                  {filteredData.length} employé(s) trouvé(s) - Page {currentPage} sur {totalPages}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Filtres et recherche */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <Input
+                    placeholder="Rechercher un employé..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="flex-1 text-sm"
+                  />
+                  <Select value={filterStructure} onValueChange={setFilterStructure}>
+                    <SelectTrigger className="w-full sm:w-40 text-sm">
+                      <SelectValue placeholder="Toutes les structures" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Toutes les structures</SelectItem>
+                      {structures.map((structure) => (
+                        <SelectItem key={structure.idStructure} value={structure.idStructure.toString()}>
+                          {structure.nom}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : filteredData.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Aucun employé trouvé
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <Table className="text-sm">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-20 cursor-pointer hover:bg-accent" onClick={() => handleSort('matricule')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Matricule {getSortIcon('matricule')}
                               </div>
-                              <div className="text-xs text-muted-foreground truncate max-w-[120px]">
-                                {employe.user?.email}
+                            </TableHead>
+                            <TableHead className="w-40 cursor-pointer hover:bg-accent" onClick={() => handleSort('nom')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Nom & Prénom {getSortIcon('nom')}
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-2 text-xs truncate max-w-[120px]" title={employe.fonction}>
-                            {employe.fonction}
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <Badge variant="outline" className="text-xs">
-                              {employe.structure?.nom}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <Badge variant={employe.soldeConge > 10 ? "default" : "destructive"} className="text-xs">
-                              {employe.soldeConge}j
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <Badge variant="secondary" className={`text-xs ${
-                              employe.user?.role === 'admin' ? 'bg-red-100 text-red-800' :
-                              employe.user?.role === 'rh' ? 'bg-purple-100 text-purple-800' :
-                              employe.user?.role === 'superieur' ? 'bg-blue-100 text-blue-800' :
-                              'bg-green-100 text-green-800'
-                            }`}>
-                              {employe.user?.role ? employe.user.role.charAt(0).toUpperCase() + employe.user.role.slice(1) : 'Employé'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="py-2">
-                            {employe.user?.password_temp ? (
-                              <div className="flex items-center gap-1">
-                                <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">
-                                  {showTempPassword === employe.matricule ? employe.user.password_temp : '••••••••'}
-                                </code>
+                            </TableHead>
+                            <TableHead className="w-32 cursor-pointer hover:bg-accent" onClick={() => handleSort('fonction')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Fonction {getSortIcon('fonction')}
+                              </div>
+                            </TableHead>
+                            <TableHead className="w-32 cursor-pointer hover:bg-accent" onClick={() => handleSort('structure')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Structure {getSortIcon('structure')}
+                              </div>
+                            </TableHead>
+                            <TableHead className="w-20 text-xs">Solde</TableHead>
+                            <TableHead className="w-20 text-xs">Compte</TableHead>
+                            <TableHead className="w-24 cursor-pointer hover:bg-accent" onClick={() => handleSort('dateEmbauche')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Embauche {getSortIcon('dateEmbauche')}
+                              </div>
+                            </TableHead>
+                            <TableHead className="w-40 text-right text-xs">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {currentItems.map((employe) => (
+                            <TableRow key={employe.matricule} className="text-xs">
+                              <TableCell className="font-mono text-xs py-2">{employe.matricule}</TableCell>
+                              <TableCell className="py-2">
+                                <div>
+                                  <div className="font-medium text-xs">
+                                    {employe.nom} {employe.prenom}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {employe.sexe === 'M' ? 'Homme' : 'Femme'}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-2 text-xs truncate max-w-[120px]" title={employe.fonction}>
+                                {employe.fonction}
+                              </TableCell>
+                              <TableCell className="py-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {employe.structure?.nom}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-2">
+                                <Badge variant={employe.soldeConge > 10 ? "default" : "destructive"} className="text-xs">
+                                  {employe.soldeConge}j
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-2">
+                                {employe.user ? (
+                                  <Badge className="bg-green-100 text-green-800 text-xs">
+                                    Compte actif
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs">
+                                    Sans compte
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="py-2 text-xs">
+                                {new Date(employe.dateEmbauche).toLocaleDateString('fr-FR')}
+                              </TableCell>
+                              <TableCell className="py-2 text-right space-x-1">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => showPasswordTemporarily(employe.matricule)}
-                                  disabled={showTempPassword === employe.matricule}
-                                  className="h-6 text-xs px-2"
+                                  onClick={() => handleOpenDialogEmploye(employe)}
+                                  className="h-7 text-xs px-2"
                                 >
-                                  {showTempPassword === employe.matricule ? '👁️' : 'Voir'}
+                                  Modifier
                                 </Button>
-                              </div>
-                            ) : employe.user?.must_change_password ? (
-                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 text-xs">
-                                À changer
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-green-50 text-green-700 text-xs">
-                                Défini
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="py-2 text-xs">
-                            {new Date(employe.dateEmbauche).toLocaleDateString('fr-FR')}
-                          </TableCell>
-                          <TableCell className="py-2 text-right space-x-1">
+                                {!employe.user && (
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => handleOpenDialogUtilisateur(employe)}
+                                    className="h-7 text-xs px-2"
+                                  >
+                                    Créer compte
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Affichage de {indexOfFirstItem + 1} à {Math.min(indexOfLastItem, filteredData.length)} sur {filteredData.length} employés
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => paginate(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="h-8 w-8 p-0"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </Button>
+                          
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                             <Button
-                              variant="outline"
+                              key={page}
+                              variant={currentPage === page ? "default" : "outline"}
                               size="sm"
-                              onClick={() => handleOpenDialog(employe)}
-                              className="h-7 text-xs px-2"
+                              onClick={() => paginate(page)}
+                              className="h-8 w-8 p-0 text-xs"
                             >
-                              Modifier
+                              {page}
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => reinitialiserMotDePasse(employe)}
-                              className="h-7 text-xs px-2 text-orange-600 border-orange-200 hover:bg-orange-50"
-                            >
-                              Réinit. MDP
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                          ))}
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => paginate(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="h-8 w-8 p-0"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="utilisateurs">
+            <Card>
+              <CardHeader>
+                <CardTitle>Comptes Utilisateurs</CardTitle>
+                <CardDescription>
+                  {filteredData.length} compte(s) utilisateur(s) trouvé(s) - Page {currentPage} sur {totalPages}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Filtres et recherche */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <Input
+                    placeholder="Rechercher un utilisateur..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="flex-1 text-sm"
+                  />
+                  <Select value={filterStructure} onValueChange={setFilterStructure}>
+                    <SelectTrigger className="w-full sm:w-40 text-sm">
+                      <SelectValue placeholder="Toutes les structures" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Toutes les structures</SelectItem>
+                      {structures.map((structure) => (
+                        <SelectItem key={structure.idStructure} value={structure.idStructure.toString()}>
+                          {structure.nom}
+                        </SelectItem>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                    <div className="text-sm text-muted-foreground">
-                      Affichage de {indexOfFirstItem + 1} à {Math.min(indexOfLastItem, sortedAndFilteredEmployes.length)} sur {sortedAndFilteredEmployes.length} employés
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => paginate(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="h-8 w-8 p-0"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                      </Button>
-                      
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => paginate(page)}
-                          className="h-8 w-8 p-0 text-xs"
-                        >
-                          {page}
-                        </Button>
-                      ))}
-                      
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => paginate(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className="h-8 w-8 p-0"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </Button>
-                    </div>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                   </div>
+                ) : filteredData.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Aucun compte utilisateur trouvé
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <Table className="text-sm">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-20 cursor-pointer hover:bg-accent" onClick={() => handleSort('matricule')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Matricule {getSortIcon('matricule')}
+                              </div>
+                            </TableHead>
+                            <TableHead className="w-40 cursor-pointer hover:bg-accent" onClick={() => handleSort('nom')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Nom & Prénom {getSortIcon('nom')}
+                              </div>
+                            </TableHead>
+                            <TableHead className="w-32 cursor-pointer hover:bg-accent" onClick={() => handleSort('email')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Email {getSortIcon('email')}
+                              </div>
+                            </TableHead>
+                            <TableHead className="w-32 cursor-pointer hover:bg-accent" onClick={() => handleSort('role')}>
+                              <div className="flex items-center gap-1 text-xs">
+                                Rôle {getSortIcon('role')}
+                              </div>
+                            </TableHead>
+                            <TableHead className="w-32 text-xs">Mot de passe</TableHead>
+                            <TableHead className="w-32 text-xs">Statut</TableHead>
+                            <TableHead className="w-40 text-right text-xs">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {currentItems.map((employe) => (
+                            <TableRow key={employe.matricule} className="text-xs">
+                              <TableCell className="font-mono text-xs py-2">{employe.matricule}</TableCell>
+                              <TableCell className="py-2">
+                                <div>
+                                  <div className="font-medium text-xs">
+                                    {employe.nom} {employe.prenom}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground truncate max-w-[120px]">
+                                    {employe.fonction}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-2 text-xs">
+                                {employe.user?.email}
+                              </TableCell>
+                              <TableCell className="py-2">
+                                <Badge variant="secondary" className={`text-xs ${
+                                  employe.user?.role === 'admin' ? 'bg-red-100 text-red-800' :
+                                  employe.user?.role === 'rh' ? 'bg-purple-100 text-purple-800' :
+                                  employe.user?.role === 'superieur' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-green-100 text-green-800'
+                                }`}>
+                                  {employe.user?.role ? employe.user.role.charAt(0).toUpperCase() + employe.user.role.slice(1) : 'Employé'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-2">
+                                {employe.user?.password_temp ? (
+                                  <div className="flex items-center gap-1">
+                                    <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">
+                                      {showTempPassword === employe.matricule ? employe.user.password_temp : '••••••••'}
+                                    </code>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => showPasswordTemporarily(employe.matricule)}
+                                      disabled={showTempPassword === employe.matricule}
+                                      className="h-6 text-xs px-2"
+                                    >
+                                      {showTempPassword === employe.matricule ? 'Visible' : 'Voir'}
+                                    </Button>
+                                  </div>
+                                ) : employe.user?.must_change_password ? (
+                                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 text-xs">
+                                    À changer
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-green-50 text-green-700 text-xs">
+                                    Défini
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="py-2">
+                                <Badge variant={employe.user?.must_change_password ? "outline" : "default"} className="text-xs">
+                                  {employe.user?.must_change_password ? 'Première connexion' : 'Actif'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-2 text-right space-x-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => reinitialiserMotDePasse(employe)}
+                                  className="h-7 text-xs px-2 text-orange-600 border-orange-200 hover:bg-orange-50"
+                                >
+                                  Réinit. MDP
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenDialogEmploye(employe)}
+                                  className="h-7 text-xs px-2"
+                                >
+                                  Modifier
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Affichage de {indexOfFirstItem + 1} à {Math.min(indexOfLastItem, filteredData.length)} sur {filteredData.length} comptes
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => paginate(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="h-8 w-8 p-0"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </Button>
+                          
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            <Button
+                              key={page}
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => paginate(page)}
+                              className="h-8 w-8 p-0 text-xs"
+                            >
+                              {page}
+                            </Button>
+                          ))}
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => paginate(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="h-8 w-8 p-0"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* Modal d'affichage du mot de passe temporaire */}
@@ -821,25 +1142,25 @@ export default function GestionEmployes() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal d'ajout/modification */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Modal d'ajout/modification employé */}
+      <Dialog open={dialogEmployeOpen} onOpenChange={setDialogEmployeOpen}>
         <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
               </svg>
-              {editing ? `Modifier ${formData.prenom} ${formData.nom}` : 'Ajouter un nouvel employé'}
+              {editing ? `Modifier ${formDataEmploye.prenom} ${formDataEmploye.nom}` : 'Ajouter un nouvel employé'}
             </DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
               {editing 
                 ? 'Modifiez les informations de l\'employé' 
-                : 'Remplissez les informations pour créer un nouvel employé et son compte utilisateur'
+                : 'Remplissez les informations pour créer un nouvel employé'
               }
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmitEmploye} className="space-y-6">
             
             {/* Section Informations Personnelles */}
             <div className="bg-muted/30 rounded-lg p-4">
@@ -857,8 +1178,8 @@ export default function GestionEmployes() {
                   </Label>
                   <Input
                     id="nom"
-                    value={formData.nom}
-                    onChange={(e) => setFormData(prev => ({ ...prev, nom: e.target.value }))}
+                    value={formDataEmploye.nom}
+                    onChange={(e) => setFormDataEmploye(prev => ({ ...prev, nom: e.target.value }))}
                     required
                     placeholder="Entrez le nom"
                   />
@@ -870,8 +1191,8 @@ export default function GestionEmployes() {
                   </Label>
                   <Input
                     id="prenom"
-                    value={formData.prenom}
-                    onChange={(e) => setFormData(prev => ({ ...prev, prenom: e.target.value }))}
+                    value={formDataEmploye.prenom}
+                    onChange={(e) => setFormDataEmploye(prev => ({ ...prev, prenom: e.target.value }))}
                     required
                     placeholder="Entrez le prénom"
                   />
@@ -881,13 +1202,13 @@ export default function GestionEmployes() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div className="space-y-2">
                   <Label htmlFor="sexe">Sexe</Label>
-                  <Select value={formData.sexe} onValueChange={(value: 'M' | 'F') => setFormData(prev => ({ ...prev, sexe: value }))}>
+                  <Select value={formDataEmploye.sexe} onValueChange={(value: 'M' | 'F') => setFormDataEmploye(prev => ({ ...prev, sexe: value }))}>
                     <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="M">👨 Masculin</SelectItem>
-                      <SelectItem value="F">👩 Féminin</SelectItem>
+                      <SelectItem value="M">Masculin</SelectItem>
+                      <SelectItem value="F">Féminin</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -899,8 +1220,8 @@ export default function GestionEmployes() {
                   <Input
                     id="dateEmbauche"
                     type="date"
-                    value={formData.dateEmbauche}
-                    onChange={(e) => setFormData(prev => ({ ...prev, dateEmbauche: e.target.value }))}
+                    value={formDataEmploye.dateEmbauche}
+                    onChange={(e) => setFormDataEmploye(prev => ({ ...prev, dateEmbauche: e.target.value }))}
                     required
                   />
                 </div>
@@ -922,7 +1243,7 @@ export default function GestionEmployes() {
                     Structure <span className="text-red-500">*</span>
                   </Label>
                   <Select 
-                    value={formData.idStructure.toString()} 
+                    value={formDataEmploye.idStructure.toString()} 
                     onValueChange={handleStructureChange}
                   >
                     <SelectTrigger>
@@ -946,16 +1267,16 @@ export default function GestionEmployes() {
                     Fonction <span className="text-red-500">*</span>
                   </Label>
                   <Select 
-                    value={formData.fonction} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, fonction: value }))}
-                    disabled={!formData.idStructure}
+                    value={formDataEmploye.fonction} 
+                    onValueChange={handleFonctionChange}
+                    disabled={!formDataEmploye.idStructure}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={formData.idStructure ? "Sélectionnez une fonction" : "Sélectionnez d'abord une structure"} />
+                      <SelectValue placeholder={formDataEmploye.idStructure ? "Sélectionnez une fonction" : "Sélectionnez d'abord une structure"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {formData.idStructure && fonctionsParStructure[formData.idStructure] ? (
-                        fonctionsParStructure[formData.idStructure].map((fonction) => (
+                      {formDataEmploye.idStructure && fonctionsParStructure[formDataEmploye.idStructure] ? (
+                        fonctionsParStructure[formDataEmploye.idStructure].map((fonction) => (
                           <SelectItem key={fonction} value={fonction}>
                             {fonction}
                           </SelectItem>
@@ -976,12 +1297,10 @@ export default function GestionEmployes() {
                   <div className="flex items-center gap-2">
                     <Input
                       id="matricule"
-                      value={formData.matricule}
-                      onChange={(e) => setFormData(prev => ({ ...prev, matricule: e.target.value }))}
-                      required
-                      disabled={editing}
+                      value={editing ? generatedMatricule : generatedMatricule}
+                      readOnly
                       placeholder={!editing ? "Généré automatiquement" : ""}
-                      className="font-mono"
+                      className="font-mono bg-muted"
                     />
                     {!editing && (
                       <Badge variant="secondary" className="whitespace-nowrap bg-blue-100 text-blue-800">
@@ -989,9 +1308,9 @@ export default function GestionEmployes() {
                       </Badge>
                     )}
                   </div>
-                  {!editing && formData.fonction && formData.dateEmbauche && (
+                  {!editing && formDataEmploye.fonction && formDataEmploye.dateEmbauche && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Format: {FONCTION_CODES[formData.fonction] || 'XXX'}{new Date(formData.dateEmbauche).getFullYear()}XXX
+                      Format: {FONCTION_CODES[formDataEmploye.fonction] || 'XXX'}{new Date(formDataEmploye.dateEmbauche).getFullYear()}XXX
                     </p>
                   )}
                 </div>
@@ -1002,8 +1321,8 @@ export default function GestionEmployes() {
                     <Input
                       id="soldeConge"
                       type="number"
-                      value={formData.soldeConge}
-                      onChange={(e) => setFormData(prev => ({ ...prev, soldeConge: parseInt(e.target.value) || 0 }))}
+                      value={formDataEmploye.soldeConge}
+                      onChange={(e) => setFormDataEmploye(prev => ({ ...prev, soldeConge: parseInt(e.target.value) || 0 }))}
                       required
                       min="0"
                       max="60"
@@ -1019,16 +1338,16 @@ export default function GestionEmployes() {
               <div className="mt-4">
                 <Label htmlFor="superieur">Supérieur hiérarchique</Label>
                 <div className="p-3 bg-muted/50 rounded-lg border mt-1">
-                  {formData.superieur_id ? (
-                    superieurs.find(s => s.matricule === formData.superieur_id) ? (
+                  {formDataEmploye.superieur_id ? (
+                    superieurs.find(s => s.matricule === formDataEmploye.superieur_id) ? (
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="font-medium">
-                            {superieurs.find(s => s.matricule === formData.superieur_id)?.prenom}{' '}
-                            {superieurs.find(s => s.matricule === formData.superieur_id)?.nom}
+                            {superieurs.find(s => s.matricule === formDataEmploye.superieur_id)?.prenom}{' '}
+                            {superieurs.find(s => s.matricule === formDataEmploye.superieur_id)?.nom}
                           </span>
                           <span className="text-muted-foreground ml-2 text-sm">
-                            ({formData.superieur_id}) - {superieurs.find(s => s.matricule === formData.superieur_id)?.fonction}
+                            ({formDataEmploye.superieur_id}) - {superieurs.find(s => s.matricule === formDataEmploye.superieur_id)?.fonction}
                           </span>
                         </div>
                         <Badge variant="outline" className="ml-2">
@@ -1055,14 +1374,75 @@ export default function GestionEmployes() {
               </div>
             </div>
 
-            {/* Section Compte Utilisateur */}
+            <DialogFooter className="flex gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setDialogEmployeOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit" className="min-w-24">
+                {editing ? (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Modifier
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Créer l'employé
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de création de compte utilisateur */}
+      <Dialog open={dialogUtilisateurOpen} onOpenChange={setDialogUtilisateurOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              Créer un compte utilisateur
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              Créez un compte utilisateur pour {selectedEmploye?.prenom} {selectedEmploye?.nom}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitUtilisateur} className="space-y-6">
+            
+            {/* Informations de l'employé */}
             <div className="bg-muted/30 rounded-lg p-4">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Compte Utilisateur
-              </h3>
+              <h3 className="text-lg font-semibold mb-4">Informations de l'employé</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <Label className="text-muted-foreground">Nom complet</Label>
+                  <p className="font-medium">{selectedEmploye?.prenom} {selectedEmploye?.nom}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Matricule</Label>
+                  <p className="font-mono font-medium">{selectedEmploye?.matricule}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Fonction</Label>
+                  <p className="font-medium">{selectedEmploye?.fonction}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Structure</Label>
+                  <p className="font-medium">{selectedEmploye?.structure?.nom}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Informations du compte */}
+            <div className="bg-muted/30 rounded-lg p-4">
+              <h3 className="text-lg font-semibold mb-4">Informations du compte</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -1070,20 +1450,18 @@ export default function GestionEmployes() {
                     <Label htmlFor="email" className="flex items-center gap-1">
                       Email <span className="text-red-500">*</span>
                     </Label>
-                    {!editing && (
-                      <Button type="button" variant="outline" size="sm" onClick={genererEmail} className="h-8">
-                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Générer
-                      </Button>
-                    )}
+                    <Button type="button" variant="outline" size="sm" onClick={genererEmail} className="h-8">
+                      <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Générer
+                    </Button>
                   </div>
                   <Input
                     id="email"
                     type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    value={formDataUtilisateur.email}
+                    onChange={(e) => setFormDataUtilisateur(prev => ({ ...prev, email: e.target.value }))}
                     required
                     placeholder="ex: prenom.nom@spat.com"
                   />
@@ -1092,8 +1470,8 @@ export default function GestionEmployes() {
                 <div className="space-y-2">
                   <Label htmlFor="role">Rôle</Label>
                   <Select 
-                    value={formData.role} 
-                    onValueChange={(value: 'employe' | 'superieur' | 'rh' | 'admin') => setFormData(prev => ({ ...prev, role: value }))}
+                    value={formDataUtilisateur.role} 
+                    onValueChange={(value: 'employe' | 'superieur' | 'rh' | 'admin') => setFormDataUtilisateur(prev => ({ ...prev, role: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1128,73 +1506,60 @@ export default function GestionEmployes() {
                 </div>
               </div>
 
-              {!editing && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      id="genererMotDePasse"
-                      checked={formData.genererMotDePasse}
-                      onChange={(e) => setFormData(prev => ({ 
-                        ...prev, 
-                        genererMotDePasse: e.target.checked,
-                        motDePasse: e.target.checked ? '' : 'password123'
-                      }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div className="flex-1">
-                      <Label htmlFor="genererMotDePasse" className="text-sm font-medium text-blue-900">
-                        Générer un mot de passe automatiquement
-                      </Label>
-                      <p className="text-xs text-blue-700 mt-1">
-                        Un mot de passe sécurisé sera généré et pourra être consulté après la création du compte.
-                      </p>
-                    </div>
+              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="genererMotDePasse"
+                    checked={formDataUtilisateur.genererMotDePasse}
+                    onChange={(e) => setFormDataUtilisateur(prev => ({ 
+                      ...prev, 
+                      genererMotDePasse: e.target.checked,
+                      motDePasse: e.target.checked ? '' : 'password123'
+                    }))}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="genererMotDePasse" className="text-sm font-medium text-blue-900">
+                      Générer un mot de passe automatiquement
+                    </Label>
+                    <p className="text-xs text-blue-700 mt-1">
+                      Un mot de passe sécurisé sera généré et pourra être consulté après la création du compte.
+                    </p>
                   </div>
-
-                  {!formData.genererMotDePasse && (
-                    <div className="mt-3 space-y-2">
-                      <Label htmlFor="motDePasse" className="text-sm font-medium text-blue-900">
-                        Mot de passe personnalisé
-                      </Label>
-                      <Input
-                        id="motDePasse"
-                        type="password"
-                        value={formData.motDePasse}
-                        onChange={(e) => setFormData(prev => ({ ...prev, motDePasse: e.target.value }))}
-                        placeholder="Entrez un mot de passe personnalisé"
-                        required
-                        className="bg-white"
-                      />
-                      <p className="text-xs text-blue-700">
-                        ⚠️ Choisissez un mot de passe sécurisé. L'employé devra le changer à sa première connexion.
-                      </p>
-                    </div>
-                  )}
                 </div>
-              )}
+
+                {!formDataUtilisateur.genererMotDePasse && (
+                  <div className="mt-3 space-y-2">
+                    <Label htmlFor="motDePasse" className="text-sm font-medium text-blue-900">
+                      Mot de passe personnalisé
+                    </Label>
+                    <Input
+                      id="motDePasse"
+                      type="password"
+                      value={formDataUtilisateur.motDePasse}
+                      onChange={(e) => setFormDataUtilisateur(prev => ({ ...prev, motDePasse: e.target.value }))}
+                      placeholder="Entrez un mot de passe personnalisé"
+                      required
+                      className="bg-white"
+                    />
+                    <p className="text-xs text-blue-700">
+                      Choisissez un mot de passe sécurisé. L'employé devra le changer à sa première connexion.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             <DialogFooter className="flex gap-2 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setDialogUtilisateurOpen(false)}>
                 Annuler
               </Button>
               <Button type="submit" className="min-w-24">
-                {editing ? (
-                  <>
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Modifier
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Créer l'employé
-                  </>
-                )}
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Créer le compte
               </Button>
             </DialogFooter>
           </form>

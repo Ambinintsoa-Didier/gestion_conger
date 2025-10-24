@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 // Shadcn components
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -61,15 +63,15 @@ export default function Login() {
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">Connexion</CardTitle>
           <CardDescription className="text-center">
-            Gestion des Congés - Entreprise
+            Gestion des Congés - Entreprise SPAT
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
             {error && (
-              <div className="bg-destructive/15 text-destructive px-4 py-3 rounded-md text-sm">
-                {error}
-              </div>
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
             
             <div className="space-y-2">
@@ -115,6 +117,33 @@ export default function Login() {
               )}
             </Button>
           </form>
+
+          {/* Séparateur */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Ou
+              </span>
+            </div>
+          </div>
+
+          {/* Bouton d'inscription - CORRIGÉ */}
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-4">
+              Nouvel employé ? Créez votre compte
+            </p>
+            <Link href="/inscription" className="w-full block">
+              <Button variant="outline" className="w-full">
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+                S'inscrire
+              </Button>
+            </Link>
+          </div>
 
           {/* Comptes de test */}
           <div className="mt-6 p-4 bg-muted rounded-lg">

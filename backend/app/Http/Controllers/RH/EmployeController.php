@@ -11,8 +11,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\CompteEmployeCree;
 
 class EmployeController extends Controller
 {
@@ -74,7 +72,7 @@ class EmployeController extends Controller
         DB::beginTransaction();
         
         try {
-            // Validation des données
+            // Validation MODIFIÉE - sans email/role/mot de passe
             $validated = $request->validate([
                 'matricule' => 'required|string|unique:employes,matricule|max:20',
                 'nom' => 'required|string|max:255',
@@ -84,14 +82,10 @@ class EmployeController extends Controller
                 'soldeConge' => 'required|integer|min:0|max:365',
                 'dateEmbauche' => 'required|date',
                 'idStructure' => 'required|exists:structures,idStructure',
-                'superieur_id' => 'nullable|exists:employes,matricule',
-                'email' => 'required|email|unique:users,email',
-                'role' => 'required|in:employe,superieur,rh,admin',
-                'genererMotDePasse' => 'required|boolean',
-                'motDePasse' => $request->genererMotDePasse ? 'nullable|string' : 'required|string|min:8'
+                'superieur_id' => 'nullable|exists:employes,matricule'
             ]);
 
-            // Créer l'employé
+            // Créer UNIQUEMENT l'employé (sans compte utilisateur)
             $employe = Employe::create([
                 'matricule' => $validated['matricule'],
                 'nom' => $validated['nom'],
@@ -104,58 +98,15 @@ class EmployeController extends Controller
                 'superieur_id' => $validated['superieur_id'] ?: null
             ]);
 
-            // Gestion du mot de passe
-            if ($request->genererMotDePasse) {
-                $motDePasseTemporaire = $this->genererMotDePasseSecurise();
-                $passwordToHash = $motDePasseTemporaire;
-            } else {
-                $motDePasseTemporaire = $validated['motDePasse'];
-                $passwordToHash = $validated['motDePasse'];
-            }
-
-            // Créer l'utilisateur
-            $user = User::create([
-                'email' => $validated['email'],
-                'motDePasse' => Hash::make($passwordToHash),
-                'role' => $validated['role'],
-                'matricule_employe' => $employe->matricule,
-                'password_temp' => $motDePasseTemporaire,
-                'must_change_password' => true
-            ]);
-
-            // 🔥 ENVOYER L'EMAIL À L'EMPLOYÉ
-            $emailEnvoye = false;
-            try {
-                $donneesEmail = [
-                    'nom' => $employe->nom,
-                    'prenom' => $employe->prenom,
-                    'email' => $user->email,
-                    'matricule' => $employe->matricule,
-                    'motDePasse' => $motDePasseTemporaire,
-                    'fonction' => $employe->fonction,
-                    'dateEmbauche' => $employe->dateEmbauche->format('d/m/Y')
-                ];
-
-                Mail::to($user->email)->send(new CompteEmployeCree($donneesEmail));
-                $emailEnvoye = true;
-                Log::info("✅ Email envoyé à: " . $user->email);
-                
-            } catch (\Exception $emailException) {
-                Log::error('❌ Erreur envoi email: ' . $emailException->getMessage());
-                // On continue même si l'email échoue
-            }
-
             DB::commit();
 
             // Charger les relations pour la réponse
-            $employe->load(['structure', 'superieur', 'user']);
+            $employe->load(['structure', 'superieur']);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Employé créé avec succès' . ($emailEnvoye ? ' et email envoyé' : ' (erreur envoi email)'),
-                'employe' => $employe,
-                'tempPassword' => $motDePasseTemporaire,
-                'email_envoye' => $emailEnvoye
+                'message' => 'Employé créé avec succès. L\'employé pourra créer son compte ultérieurement.',
+                'employe' => $employe
             ], 201);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -186,6 +137,7 @@ class EmployeController extends Controller
         try {
             $employe = Employe::where('matricule', $matricule)->firstOrFail();
 
+            // Validation MODIFIÉE - sans email/role
             $validated = $request->validate([
                 'nom' => 'required|string|max:255',
                 'prenom' => 'required|string|max:255',
@@ -194,12 +146,10 @@ class EmployeController extends Controller
                 'soldeConge' => 'required|integer|min:0|max:365',
                 'dateEmbauche' => 'required|date',
                 'idStructure' => 'required|exists:structures,idStructure',
-                'superieur_id' => 'nullable|exists:employes,matricule',
-                'email' => 'required|email|unique:users,email,' . $employe->user->idUtilisateur . ',idUtilisateur',
-                'role' => 'required|in:employe,superieur,rh,admin'
+                'superieur_id' => 'nullable|exists:employes,matricule'
             ]);
 
-            // Mettre à jour l'employé
+            // Mettre à jour UNIQUEMENT l'employé
             $employe->update([
                 'nom' => $validated['nom'],
                 'prenom' => $validated['prenom'],
@@ -211,15 +161,9 @@ class EmployeController extends Controller
                 'superieur_id' => $validated['superieur_id'] ?: null
             ]);
 
-            // Mettre à jour l'utilisateur
-            $employe->user->update([
-                'email' => $validated['email'],
-                'role' => $validated['role']
-            ]);
-
             DB::commit();
 
-            $employe->load(['structure', 'superieur', 'user']);
+            $employe->load(['structure', 'superieur']);
 
             return response()->json([
                 'success' => true,
@@ -255,7 +199,7 @@ class EmployeController extends Controller
         try {
             $employe = Employe::where('matricule', $matricule)->firstOrFail();
 
-            // Supprimer l'utilisateur associé
+            // Supprimer l'utilisateur associé s'il existe
             if ($employe->user) {
                 $employe->user->delete();
             }
@@ -282,64 +226,170 @@ class EmployeController extends Controller
     }
 
     /**
-     * Reset employee password
+     * Create user account for existing employee (Self-registration)
      */
-    public function resetPassword($matricule)
+    public function creerCompteEmploye(Request $request)
     {
         DB::beginTransaction();
         
         try {
-            $employe = Employe::where('matricule', $matricule)->firstOrFail();
-            
-            if (!$employe->user) {
-                throw new \Exception('Aucun utilisateur associé à cet employé');
-            }
-
-            $nouveauMotDePasse = $this->genererMotDePasseSecurise();
-
-            $employe->user->update([
-                'motDePasse' => Hash::make($nouveauMotDePasse),
-                'password_temp' => $nouveauMotDePasse,
-                'must_change_password' => true
+            $validated = $request->validate([
+                'matricule' => 'required|exists:employes,matricule',
+                'email' => 'required|email|unique:users,email',
+                'motDePasse' => 'required|string|min:8|confirmed'
+            ], [
+                'matricule.exists' => 'Matricule non reconnu. Vérifiez votre matricule.',
+                'email.unique' => 'Cette adresse email est déjà utilisée.',
+                'motDePasse.confirmed' => 'Les mots de passe ne correspondent pas.'
             ]);
 
-            // 🔥 ENVOYER EMAIL POUR RÉINITIALISATION
-            $emailEnvoye = false;
-            try {
-                $donneesEmail = [
-                    'nom' => $employe->nom,
-                    'prenom' => $employe->prenom,
-                    'email' => $employe->user->email,
-                    'matricule' => $employe->matricule,
-                    'motDePasse' => $nouveauMotDePasse,
-                    'fonction' => $employe->fonction,
-                    'dateEmbauche' => $employe->dateEmbauche->format('d/m/Y'),
-                    'raison' => 'réinitialisation'
-                ];
-
-                Mail::to($employe->user->email)->send(new CompteEmployeCree($donneesEmail));
-                $emailEnvoye = true;
-                Log::info("✅ Email réinitialisation envoyé à: " . $employe->user->email);
-                
-            } catch (\Exception $emailException) {
-                Log::error('❌ Erreur envoi email réinitialisation: ' . $emailException->getMessage());
+            $employe = Employe::where('matricule', $validated['matricule'])->firstOrFail();
+            
+            // Vérifier que l'employé n'a pas déjà un compte
+            if ($employe->user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Un compte existe déjà pour cet employé. Contactez les RH si vous avez oublié vos identifiants.'
+                ], 422);
             }
+
+            // Créer le compte utilisateur avec le mot de passe choisi par l'employé
+            $user = User::create([
+                'email' => $validated['email'],
+                'motDePasse' => Hash::make($validated['motDePasse']),
+                'role' => 'employe', // Par défaut pour l'auto-inscription
+                'matricule_employe' => $employe->matricule,
+                'password_temp' => null,
+                'must_change_password' => false // L'employé a déjà choisi son mot de passe
+            ]);
 
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Mot de passe réinitialisé avec succès' . ($emailEnvoye ? ' et email envoyé' : ' (erreur envoi email)'),
-                'tempPassword' => $nouveauMotDePasse,
-                'email_envoye' => $emailEnvoye
+                'message' => 'Compte créé avec succès! Vous pouvez maintenant vous connecter.',
+                'user' => $user
+            ], 201);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur de validation',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur création compte employé: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la création du compte',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get employees without user accounts
+     */
+    public function employesSansCompte()
+    {
+        try {
+            $employesSansCompte = Employe::whereDoesntHave('user')
+                ->with(['structure'])
+                ->get()
+                ->map(function ($employe) {
+                    return [
+                        'matricule' => $employe->matricule,
+                        'nom' => $employe->nom,
+                        'prenom' => $employe->prenom,
+                        'fonction' => $employe->fonction,
+                        'structure' => $employe->structure,
+                        'dateEmbauche' => $employe->dateEmbauche->format('Y-m-d')
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'employes' => $employesSansCompte
             ]);
 
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Erreur dans EmployeController@resetPassword: ' . $e->getMessage());
+            Log::error('Erreur dans EmployeController@employesSansCompte: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la réinitialisation du mot de passe',
+                'message' => 'Erreur lors du chargement des employés sans compte',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create user account for specific employee (Admin function)
+     */
+    public function creerCompteUtilisateur(Request $request, $matricule)
+    {
+        DB::beginTransaction();
+        
+        try {
+            $employe = Employe::where('matricule', $matricule)->firstOrFail();
+
+            // Vérifier que l'employé n'a pas déjà un compte
+            if ($employe->user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cet employé a déjà un compte utilisateur'
+                ], 422);
+            }
+
+            $validated = $request->validate([
+                'email' => 'required|email|unique:users,email',
+                'role' => 'required|in:employe,superieur,rh,admin',
+                'genererMotDePasse' => 'required|boolean',
+                'motDePasse' => $request->genererMotDePasse ? 'nullable|string' : 'required|string|min:8'
+            ]);
+
+            // Gestion du mot de passe
+            if ($request->genererMotDePasse) {
+                $motDePasseTemporaire = $this->genererMotDePasseSecurise();
+                $passwordToHash = $motDePasseTemporaire;
+            } else {
+                $motDePasseTemporaire = $validated['motDePasse'];
+                $passwordToHash = $validated['motDePasse'];
+            }
+
+            // Créer l'utilisateur
+            $user = User::create([
+                'email' => $validated['email'],
+                'motDePasse' => Hash::make($passwordToHash),
+                'role' => $validated['role'],
+                'matricule_employe' => $employe->matricule,
+                'password_temp' => $request->genererMotDePasse ? $motDePasseTemporaire : null,
+                'must_change_password' => $request->genererMotDePasse
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Compte utilisateur créé avec succès',
+                'user' => $user,
+                'tempPassword' => $request->genererMotDePasse ? $motDePasseTemporaire : null
+            ], 201);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur de validation',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Erreur dans EmployeController@creerCompteUtilisateur: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la création du compte utilisateur',
                 'error' => $e->getMessage()
             ], 500);
         }
